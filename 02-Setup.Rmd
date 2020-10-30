@@ -1,0 +1,95 @@
+# Getting Started {#Setup2}
+
+```{r tidyr2, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy = FALSE)
+
+```
+
+In this section, we load the packages we need, source the scripts, and assign parameter values required for the analysis. 
+
+## Update Packages {#Setup2.1}
+
+The functionalities of some packages may require updated versions of [R](https://www.r-project.org/) and [RStudio](https://www.rstudio.com). To avoid errors, please ensure you are using the most recent releases of R and RStudio, and update your R packages.
+
+```{r update, eval = FALSE}
+
+update.packages()                         
+
+```
+
+## Installing Packages {#Setup2.2}
+
+There are a few key packages used to access, manipulate, analyse, and create visualizations. You may find you want to upload other packages depending on your analytical needs. 
+
+We access the NOS data using the `naturecounts` pacakge. You can install it from GitHub with the remotes package:
+
+``````{r install, eval = FALSE}
+
+install.packages("remotes")
+remotes::install_github("BirdStudiesCanada/naturecounts")
+
+```
+
+If doing analyses with the R-INLA package, it can be downloaded from the website using the following code:
+
+```{r download, INLA echo = TRUE, message = FALSE}
+
+install.packages("INLA", repos=c(getOption("repos"), INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
+                                 
+```
+
+All the other packages are available from the CRAN repository and can be downloaded using the **Install** button under the **Packages** tab (bottom right window in RStudio)    
+                                 
+```{r loadpackages1, echo = FALSE, message = FALSE}
+
+require(naturecounts)
+require(INLA)
+require(tidyverse)
+require(lubridate)
+require(reshape)
+require(ggplot2)
+#require(fossil)
+
+```
+
+## Output Directory {#Setup2.3}
+
+Create a directory for analytical outputs. This will be placed in your current working directory. The location of your current directory is printed in the upper left hand corner of the RStudio consol next to the R symbol. 
+
+```{r outdir echo = FALSE, message = FALSE}
+
+#set to the maximum year of current data
+max.yr <- 2019 #at time of writing 2020 data were not yet available. 
+#data from 2020 will be incomplete for most provinces due to Covid
+
+# output directory for all analitical output files
+out.dir <- paste("./output/", max.yr, "/", sep = "")
+
+# create output directory if it does not exist
+dir.create(out.dir, showWarnings=FALSE, recursive=TRUE)
+
+```
+
+## Analysis Parameters {#Setup2.4}
+
+A file was created that outlines analysis parameters for various Provinces. 
+
+Column definitions: 
+- collection: each province/region has a unique collection ID 
+- protocol_id: protocol vary between provinces, and some provinces/regions have several protocols within them. However, not all protocol_id are specified in this field and need to be parsed out using auxially data (e.g., BCOWLS uses the BCregions to differentiate protocol_id)
+- interval: indicates if the two minute silent listening periods is recorded in 1 or 2 data columns. If 2 data columbs then these datasets are ideal for modelling the detection process
+- min.year: start year of survey
+- max.year: end year of survey, or set to NA if ongoing 
+- temp: min temperature cut off for survey
+- min.doy: the earlies day of the year a survey should be run
+- max.doy: the latest day of the year a survey should be run
+
+```{r load parameters echo = FALSE, message = FALSE}
+
+#These tables are available on Github. 
+anal.param<-read.csv("Analysis Parameters.csv") 
+BCregion<-read.csv("Regions_BCY.csv")
+
+```

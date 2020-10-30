@@ -1,2 +1,2 @@
 # National-NOS
-Birds Canada R code for the National NOS analysis
+National population trends using the NOS data from NatureCounts
