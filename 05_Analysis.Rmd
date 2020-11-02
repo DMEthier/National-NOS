@@ -56,7 +56,7 @@ sp.data <- left_join(event.data, sp.data, by = c("SurveyAreaIdentifier", "RouteI
   nroute<-sp.data%>% group_by(survey_year) %>% summarise(nroute=n_distinct(RouteIdentifier))
   sp.data<-left_join(nroute, sp.data, by="survey_year")
 
-#center date variables      
+#center date and route variables      
 	sp.data <- sp.data %>% mutate(mean.yr = sum(min(survey_year) + max(survey_year))/2,
 	         cyear = survey_year - mean.yr,
 	         yearfac = as.factor(cyear),
@@ -65,6 +65,8 @@ sp.data <- left_join(event.data, sp.data, by = c("SurveyAreaIdentifier", "RouteI
 
 mean.yr<- sum(min(sp.data$survey_year) + max(sp.data$survey_year))/2
 		
+  sp.data$croute<-standardize(sp.data$nroute) 
+
 #prepare variable for analysis
 sp.data$RouteIdentifier<-as.factor(sp.data$RouteIdentifier)
 sp.data<-as.data.frame(sp.data)		
@@ -74,16 +76,15 @@ sp.data<-as.data.frame(sp.data)
 ##Model formula for overdispersed poisson
 #This is used to model overdispersion f(id.iid, model="iid")   
 	
-#inla.formula <- count ~ cyear + nroute 
-#  f(RouteIdentifier, model = "iid") + f(yearfac, model = "ar1")+ f(id.iid, model="iid")
+#inla.formula1 <- count ~ cyear + croute + f(RouteIdentifier, model = #"iid") + f(yearfac, model = "ar1") + (id.iid, model="iid")
 
 #Overdispersed Poisson with no spatail autocorrelation effect
-# trend<-NULL
-# trend<-inla(inla.formula, family = "poisson", data = data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.predictor = list(compute=TRUE), control.compute = list(config=TRUE, dic=TRUE))
+# trend.op<-NULL
+# trend.op<-inla(inla.formula1, family = "poisson", data = #data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.predictor = #list(compute=TRUE), control.compute = list(config=TRUE, dic=TRUE))
 
 #Zero inflated model allows us to focus on two questions: what is driving the absence verus presence of owls, and once present, what is driving abundance. 
 
-inla.formula <- count ~ cyear + nroute +   
+inla.formula <- count ~ cyear + croute +   
   f(RouteIdentifier, model = "iid") + f(yearfac, model = "ar1")
 
 #We might want to use a penalized complexity prioir for route (volumn I)
@@ -105,18 +106,25 @@ myData<-cbind(myData, trend_lcb$summary.lincomb[,c("mean", "0.025quant", "0.975q
 myData$year<-  myData$cyear+mean.yr
 
 #Back tranform the mean count value using the helper function since we are using a log link (Zuur 2017, pg. 179). This takes alot of time. Go have a coffee. 
-pred.marg<-trend_lcb$marginals.lincomb.derived
-myData$mu<-unlist(lapply(pred.marg, function(x) inla.emarginal(exp,x)))
-myData$selo<-unlist(lapply(pred.marg, function(x) inla.qmarginal(c(0.025), inla.tmarginal(exp,x))))
-myData$seup<-unlist(lapply(pred.marg, function(x) inla.qmarginal(c(0.975), inla.tmarginal(exp,x))))
-myData<-distinct(myData)
+#pred.marg<-trend_lcb$marginals.lincomb.derived
+#myData$mu<-unlist(lapply(pred.marg, function(x) #inla.emarginal(exp,x)))
+#myData$selo<-unlist(lapply(pred.marg, function(x) #inla.qmarginal(c(0.025), inla.tmarginal(exp,x))))
+#myData$seup<-unlist(lapply(pred.marg, function(x) #inla.qmarginal(c(0.975), inla.tmarginal(exp,x))))
+#myData<-distinct(myData)
 
 #calucalte raw route mean for plotting 
-mean<-sp.data %>% group_by(survey_year) %>% summarize(mean=mean(count))
+mean<-NULL
+mean<-sp.data %>% group_by(survey_year, nroute) %>% summarize(mean=mean(count), logmean=log(mean))
+                                                  
 sp.data<-left_join(sp.data, mean, by="survey_year")
 
+#rename columns
+myData<-rename(myData, c("mean"="mu", 
+                         "0.025quant"="selo", 
+                         "0.975quant"="seup"))
+
 ggplot()+
-  geom_point(data=sp.data, aes(y=mean.x, x=survey_year))+
+  geom_point(data=sp.data, aes(y=logmean, x=survey_year))+
   xlab("Year")+
   ylab("Mean Route Count")+
   ggtitle(paste("Population trends for ", species.list[m], sep=""))+
@@ -126,9 +134,9 @@ ggplot()+
   geom_ribbon(data=myData, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
 
 #Dispersion statistic 
-pi.inla<-trend$summary.hyper[1,"mean"]  
-mu<-trend$summary.fitted.values[,"mean"]
-p<-length(trend$names.fixed)+1
+pi.inla<-trend_lcb$summary.hyper[1,"mean"]  
+mu<-trend_lcb$summary.fitted.values[,"mean"]
+p<-length(trend_lcb$names.fixed)+1
 ExpY<-(1-pi.inla)*mu
 VarY<-(1-pi.inla *(mu+pi.inla*mu^2))
 E<-(sp.data$count-ExpY)/sqrt(VarY)
@@ -156,9 +164,10 @@ colnames(Xcr)<-xnames
 lcs<-inla.make.lincombs(x1=Xcr[,"x1"], 
                         x2=Xcr[,"x2"], 
                         x3=Xcr[,"x3"])
+
 sp.data2<-cbind(sp.data, Xcr)
 
-inla.formula2<-formula(count ~ 1 + x1 + x2 + x3 + nroute +   
+inla.formula2<-formula(count ~ 1 + x1 + x2 + x3 + croute +   
   f(RouteIdentifier, model = "iid") + f(yearfac, model = "ar1"))
 
 trend_cr<-inla(inla.formula2, family = "zeroinflatedpoisson1", lincomb=lcs, control.inla = list(lincomb.derived.only=FALSE),  data=sp.data2, control.compute = list(config=TRUE, dic=TRUE), quantiles = c(0.025, 0.975))
@@ -169,11 +178,21 @@ f<-Smoother[1:nr, "mean"]
 selo<-Smoother[1:nr, "0.025quant"]
 seup<-Smoother[1:nr, "0.975quant"]
 
+myData.cr<-NULL
+
 myData.cr<-data.frame(mu=f, 
                    selo=selo, 
                    seup=seup, 
                    cyear=sp.data2$cyear, 
                    ID=rep("4 knots", nr))
+
+
+#I am not positive this is correct here. 
+#pred.marg.cr<-trend_cr$marginals.lincomb.derived
+#myData.cr$mu<-unlist(lapply(pred.marg.cr, function(x) #inla.emarginal(exp,x)))
+#myData.cr$selo<-unlist(lapply(pred.marg.cr, function(x) #inla.qmarginal(c(0.025), inla.tmarginal(exp,x))))
+#myData.cr$seup<-unlist(lapply(pred.marg.cr, function(x) #inla.qmarginal(c(0.975), inla.tmarginal(exp,x))))
+#myData.cr<-distinct(myData.cr)
 
 #Back standardize year
 myData.cr$year<-  myData.cr$cyear+mean.yr
@@ -185,6 +204,22 @@ ggplot()+
   ylab("Mean Route Count")+
   ggtitle(paste("Population trend for ", species.list[m], sep=""))+
   theme_light()
+
+ggplot()+
+  geom_point(data=sp.data, aes(y=logmean, x=survey_year))+
+  xlab("Year")+
+  ylab("Mean Route Count")+
+  ggtitle(paste("Population trends for ", species.list[m], sep=""))+
+  theme_light()+
+  theme(text=element_text(size=15))+
+  geom_line(data=myData, aes(x=year, y=mu), colour="blue")+
+  geom_ribbon(data=myData, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)+
+  geom_line(data=myData.cr, aes(x=year, y=mu), colour="red")+
+  geom_ribbon(data=myData.cr, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
+
+
+summary(trend_lcb)
+summary(trend_cr)
 
 #Calculate residuals
 #Res<-sp.data$count-mu
