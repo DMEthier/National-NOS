@@ -154,8 +154,7 @@ dat<-dat %>% filter(is.na(EffortMeasurement14)) #Repeats
 
 event.data <-NULL #clear old
 event.data <- dat %>%
-  select(SurveyAreaIdentifier, RouteIdentifier, survey_year, survey_month, survey_day, latitude, longitude) %>%   mutate(lat=latitude, long=longitude) %>% #change name for compatibility later 
-  select(-latitude, -longitude) %>% 
+  select(SurveyAreaIdentifier, RouteIdentifier, survey_year, survey_month, survey_day) %>%   
   distinct() %>%
   ungroup() %>%
   as.data.frame()
