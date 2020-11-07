@@ -50,7 +50,8 @@ require(tidyverse)
 require(lubridate)
 require(reshape)
 require(ggplot2)
-#require(fossil)
+require(mgcv) #used for the GAM spline
+require(robustHD)
 
 ```
 
