@@ -1,0 +1,211 @@
+# Analysis {#Anal1}
+
+```{r tidyr5, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy = FALSE)
+
+```
+
+Now that the data have been cleaned we are ready for the trend analysis. The analysis can be done at multiple spatail scale. Here we will focus using `ProtocolCode` first. 
+
+```{r anal.dat, echo = TRUE, message = FALSE}
+
+#ObservationCount = Total
+#ObservationCount2 = 1st Minute
+#ObservationCount3 = 2nd Minute
+
+#select desired data columns for analysis
+anal.dat<-dat %>% select("CommonName", "species_id", "RouteIdentifier", "SiteCode", "SurveyAreaIdentifier","collection", "ProtocolCode", "survey_day", "survey_month", "survey_year", "CollectorNumber", "latitude", "longitude", "StateProvince", "ObservationCount", "ObservationCount2", "ObservationCount3", "date", "doy")
+
+#Need to have seperate columns for Route and Stops. This may vary by province and may not be needed in all instanaces.   
+#anal.dat<-anal.dat %>% separate(SiteCode, c("Route", "Stop"), sep="-") 
+#anal.dat$Route<-as.factor(anal.dat$Route)
+#anal.dat$Stop<-as.factor(anal.dat$Stop)
+
+## Generate species list for analysis. The speices that make the cut will vary on province based on the data manipulation
+species.list <- unique(anal.dat$CommonName)
+
+```
+
+We are ready to develope the species-specific analysis loop
+
+```{r sp.loop, echo = TRUE, message = FALSE}
+
+for(m in 1:length(species.list)) {
+
+m<-1 #for testing
+   
+  sp.data <-NULL 
+  sp.data <- filter(anal.dat, CommonName == species.list[m]) %>%
+      droplevels()
+  
+  print(paste("Currently analyzing species ", m, "/", species.list[m], sep = "")) 
+
+#zero fill by merging with the events dataframe. 
+  sp.data <- left_join(event.data, sp.data, by = c("SurveyAreaIdentifier", "RouteIdentifier", "survey_year", "survey_month", "survey_day")) %>%
+             mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0))
+    
+#count the number of owls per route as the response varaible. This may need to be changed if the number of stops on a route has changes over time. Will need to discuss with provinical leads. 
+  
+  sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year) %>% 
+    summarise(count=sum(ObservationCount)) 
+ 
+#create the offset variable which is the number of routes run in a year to control for changes in effor over time. Previously I was using the log transformed nroute as an offset (E), however, this assumes that doubling the number of routes will double the number of owls counted, which may not hold true. The other option is to add nroute as a covariate in the model (Zuur 2018 pg 445). This was the option that was selected. It also make back tranformation easier.  
+  
+  nroute<-sp.data%>% group_by(survey_year) %>% summarise(nroute=n_distinct(RouteIdentifier))
+  sp.data<-left_join(nroute, sp.data, by="survey_year")
+
+#center date and route variables      
+	sp.data <- sp.data %>% mutate(mean.yr = sum(min(survey_year) + max(survey_year))/2,
+	         cyear = survey_year - mean.yr,
+	         yearfac = as.factor(cyear),
+	         fyear = as.factor(survey_year)) %>% 
+	  select(-mean.yr)
+
+  mean.yr<- sum(min(sp.data$survey_year) + max(sp.data$survey_year))/2
+		
+  sp.data$croute<-standardize(sp.data$nroute) 
+
+#prepare variable for analysis
+sp.data$RouteIdentifier<-as.factor(sp.data$RouteIdentifier)
+sp.data<-as.data.frame(sp.data)
+
+#Calucalte raw route mean for plotting 
+  mean<-NULL
+  mean<-sp.data %>% group_by(survey_year, nroute) %>% summarize(mean=mean(count), logmean=log(mean))                     
+  sp.data<-left_join(sp.data, mean, by="survey_year")
+
+###Creating the GLM model###
+
+##Model formula for overdispersed poisson##
+#This is used to model overdispersion f(id.iid, model="iid")   
+	
+inla.formula1 <- count ~ cyear + croute + f(RouteIdentifier, model = "iid") + f(yearfac, model = "ar1") 
+  + f(id.iid, model="iid")
+
+#Overdispersed Poisson with no spatail autocorrelation effect. 
+trend_op<-NULL
+trend_op<-inla(inla.formula1, family = "poisson", data = data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.predictor = list(compute=TRUE), control.compute = list(config=TRUE, dic=TRUE))
+
+#Dispersion Statistic Overdospersion Model
+mu.op<-trend_op$summary.fitted.values[,"mean"]
+E.op<-(sp.data$count-mu.op)/ sqrt(mu.op) #Pearson residuals
+N<-nrow(sp.data)
+p<-nrow(trend_op$summary.fixed)
+Dispersion.op<-sum(E.op^2)/(N-p)
+print(paste("Dispersions Statistic Overdispersed = ", Dispersion.op, sep = "")) 
+
+#Create model matrix for linear combinations. Needs to include cyear and croute
+myData_op<-NULL
+myData_op<-data.frame(sp.data$cyear, croute.std=0)
+myData_op<-rename(myData_op, c("sp.data.cyear"="cyear", "croute.std"="croute"))
+xmato<-model.matrix(~cyear+croute, data=myData_op)
+xmato<-as.data.frame(xmato)
+lcbo<-inla.make.lincombs(xmato)
+
+trend_lcbo<-NULL
+trend_lcbo<-inla(inla.formula1, family = "poisson", lincomb=lcbo, control.inla = list(lincomb.derived.only=FALSE), control.predictor = list(compute=TRUE, quantiles=c(0.025, 0.975)), data = data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.compute = list(config=TRUE, dic=TRUE))
+
+Betas<-trend_lcbo$summary.fixed[,c("mean", "sd", "0.025quant", "0.975quant")]
+
+myData_op<-cbind(myData_op, trend_lcbo$summary.lincomb.derived[,c("mean", "0.025quant", "0.975quant")])
+
+#Back standardize year
+myData_op$year<-  myData_op$cyear+mean.yr
+
+#rename columns
+myData_op<-rename(myData_op, c("mean"="mu", 
+                         "0.025quant"="selo", 
+                         "0.975quant"="seup"))
+
+#Back tranform the mean count value using the helper function since we are using a log link (Zuur 2017, pg. 179). This takes alot of time. Go have a coffee. 
+  pred.marg.op<-trend_lcbo$marginals.lincomb.derived
+  myData_op$mu<-unlist(lapply(pred.marg.op, function(x) inla.emarginal(exp,x)))
+  myData_op$selo<-unlist(lapply(pred.marg.op, function(x) inla.qmarginal(c(0.025),   inla.tmarginal(exp,x))))
+  myData_op$seup<-unlist(lapply(pred.marg.op, function(x) inla.qmarginal(c(0.975),   inla.tmarginal(exp,x))))
+  myData_op<-distinct(myData_op)
+  
+#  
+  
+  mu.op<-trend_op$summary.fitted.values[,"mean"]
+  fit<-cbind(sp.data, mu.op)
+
+ggplot()+
+  geom_jitter(data=fit, aes(y=mu.op, x=survey_year))+
+  xlab("Year")+
+  ylab("Mean Route Count")+
+  ggtitle(paste("Population trends for ", species.list[m], sep=""))+
+  theme_light()+
+  theme(text=element_text(size=15))+
+  geom_line(data=myData_op, aes(x=year, y=mu), colour="black")+
+  geom_ribbon(data=myData_op, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
+
+
+##Zero inflated model##
+#Allows us to focus on two questions: what is driving the absence verus presence of owls, and once present, what is driving abundance. 
+
+#inla.formula2<- count ~ cyear + croute +   
+#  f(RouteIdentifier, model = "iid") + f(yearfac, model = "ar1")
+
+#trend_zip<-inla(inla.formula2, family = "zeroinflatedpoisson1", data=sp.data, control.compute = list(config=TRUE, dic=TRUE), control.predictor = list(compute=TRUE))
+
+#Dispersion Statistic ZeroInflated 
+#pi.inla<-trend_zip$summary.hyper[1,"mean"]  
+#mu.zip<-trend_zip$summary.fitted.values[,"mean"]
+#ExpY<-(1-pi.inla)*mu.zip
+#VarY<-(1-pi.inla) *(mu.zip+pi.inla*mu.zip^2)
+#p<-length(trend_zip$names.fixed)+1
+#E.zip<-(sp.data$count-ExpY)/sqrt(VarY) #Pearson residuals
+#Dispersion.zip<-sum(E.zip^2)/(N-p)
+#print(paste("Dispersions Statistic ZIP = ", Dispersion.zip, sep = "")) 
+
+#We might want to use a penalized complexity prioir for route (volumn I)
+#hyper.idd<-list(prec=list(prioit='pc.prec', param=c(2, 0.05)))
+
+#Create model matrix for linear combinations (this has not been corrected to include croute)
+#myData_zip<-NULL
+#myData_zip<-data.frame(sp.data$cyear)
+#myData_zip<-rename(myData_zip, c("sp.data.cyear"="cyear"))
+#xmat<-model.matrix(~cyear, data=sp.data)
+#xmat<-as.data.frame(xmat)
+#lcb<-inla.make.lincombs(xmat)
+
+trend_lcb<-inla(inla.formula2, family = "zeroinflatedpoisson1", lincomb=lcb, control.inla = list(lincomb.derived.only=FALSE), control.predictor = list(compute=TRUE, quantiles=c(0.025, 0.975)), data=sp.data, control.compute = list(config=TRUE, dic=TRUE))
+
+myData_zip<-cbind(myData_zip, trend_lcb$summary.lincomb[,c("mean", "0.025quant", "0.975quant")])
+
+#Back standardize year
+myData_zip$year<-  myData_zip$cyear+mean.yr
+
+#Back tranform the mean count value using the helper function since we are using a log link (Zuur 2017, pg. 179). This takes alot of time. Go have a coffee. 
+  #pred.marg<-trend_lcb$marginals.lincomb.derived
+  #myData$mu<-unlist(lapply(pred.marg, function(x) #inla.emarginal(exp,x)))
+  #myData$selo<-unlist(lapply(pred.marg, function(x) #inla.qmarginal(c(0.025),   inla.tmarginal(exp,x))))
+  #myData$seup<-unlist(lapply(pred.marg, function(x) #inla.qmarginal(c(0.975),   inla.tmarginal(exp,x))))
+  #myData<-distinct(myData)
+
+#rename columns
+myData_zip<-rename(myData_zip, c("mean"="mu", 
+                         "0.025quant"="selo", 
+                         "0.975quant"="seup"))
+
+ggplot()+
+  geom_point(data=sp.data, aes(y=logmean, x=survey_year))+
+  xlab("Year")+
+  ylab("Mean Route Count")+
+  ggtitle(paste("Population trends for ", species.list[m], sep=""))+
+  theme_light()+
+  theme(text=element_text(size=15))+
+  geom_line(data=myData, aes(x=year, y=mu), colour="black")+
+  geom_ribbon(data=myData, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
+
+
+
+#Lets work through a Posterior Predictive check next. 
+
+
+} #end species loop
+
+
+```
