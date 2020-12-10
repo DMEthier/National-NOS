@@ -21,7 +21,7 @@ library(rnaturalearth)
 
 ```
 
-Code to create Provincial plots 
+Code to create Provincial plots through time using the unfiltered data
 
 ```{r plotprov, echo = TRUE, message = FALSE}
 
@@ -30,15 +30,12 @@ prov<-unique(in.data$collection)
 
 for(t in 1:length(prov)) {
 
-  t<-1 #for testing
+  t<-4 #for testing individual provinces
   
 plot.data<-subset(in.data, collection==prov[t])
 
 plot.data<-plot.data %>% select(ObservationCount, RouteIdentifier, SiteCode, survey_year, latitude, longitude) %>% distinct()
 
-#remove NA in lat and long
-plot.data<-subset(plot.data, !is.na(latitude)) 
-plot.data<-subset(plot.data, !is.na(longitude)) 
 plot.data$survey_year<-as.factor(plot.data$survey_year)
 
 #Create a spatial dataframe
@@ -63,8 +60,8 @@ Code to create National plots
 
 ```{r plotnational, echo = TRUE, message = FALSE}
 
-#use full dataset
-plot.data<-in.data %>% select(ObservationCount, RouteIdentifier, SiteCode, survey_year, latitude, longitude) %>% distinct()
+#use full dataset (could also include site code if you want to have the stop on the route shown. I don' think this is necessary at the national scale. Just one point per route)
+plot.data<-in.data %>% select(ObservationCount, RouteIdentifier, survey_year, latitude, longitude) %>% distinct()
 
 #remove NA in lat and long
 plot.data<-subset(plot.data, !is.na(latitude)) 
