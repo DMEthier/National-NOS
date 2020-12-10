@@ -71,5 +71,19 @@ write.table(dat, file = paste(out.dir, "QAQC.",
 }
 
 
-##Try mapping point locations per region
+##Determine what Observation Count Fields have data for various protocols
 
+test<-in.data %>% select(ProtocolCode, RouteIdentifier, survey_year, ObservationCount, ObservationCount2, ObservationCount3, ObservationCount4, ObservationCount5, ObservationCount6, ObservationCount7)
+
+list(unique(test$ObservationCount3))
+     
+test1<-test %>% group_by(ProtocolCode) %>% summarise(Obs=n_distinct(ObservationCount), Obs2=n_distinct(ObservationCount2), Obs3=n_distinct(ObservationCount3), Obs4=n_distinct(ObservationCount4), Obs5=n_distinct(ObservationCount5), Obs6=n_distinct(ObservationCount6))
+
+##Determine how observation data are entered by revewing a subset
+
+test<-in.data %>% filter(collection=="ONOWLS" & survey_year==2015) %>% select(RouteIdentifier, survey_year, CommonName, ObservationCount, ObservationCount2, ObservationCount3)
+
+
+##Effor14
+
+test<-in.data %>% filter(collection=="SKOWLS") %>% select(RouteIdentifier, survey_year, EffortMeasurement14)
