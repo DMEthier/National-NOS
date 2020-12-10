@@ -32,9 +32,9 @@ remotes::install_github("BirdStudiesCanada/naturecounts")
 
 ```
 
-If doing analyses with the R-INLA package, it can be downloaded from the website using the following code:
+If doing the trend analyses with the R-INLA package, it can be downloaded from the website using the following code:
 
-```{r download, INLA echo = TRUE, message = FALSE}
+```{r downloadINLA, echo = TRUE, message = FALSE}
 
 install.packages("INLA", repos=c(getOption("repos"), INLA="https://inla.r-inla-download.org/R/stable"), dep=TRUE)
                                  
@@ -52,6 +52,8 @@ require(reshape)
 require(ggplot2)
 require(mgcv) #used for the GAM spline
 require(robustHD)
+require(bbsBayes)
+require(readr)
 
 ```
 
@@ -62,7 +64,7 @@ Create a directory for analytical outputs. This will be placed in your current w
 ```{r outdir echo = FALSE, message = FALSE}
 
 #set to the maximum year of current data
-max.yr <- 2019 #at time of writing 2020 data were not yet available. 
+max.yr <- 2019 #at time of writing 2020 data were not yet available
 #data from 2020 will be incomplete for most provinces due to Covid
 
 # output directory for all analitical output files
