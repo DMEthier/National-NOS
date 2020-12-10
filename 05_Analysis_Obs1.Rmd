@@ -1,0 +1,291 @@
+# Analysis {#Anal1}
+
+```{r tidyr5, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy = FALSE)
+
+```
+
+Now that the data have been cleaned we are ready (almost) for the trend analysis. The analysis can be done at multiple spatail scales and using 1 of 2 response varaible. Here we will focus using `ProtocolCode` and `ObservationCount1` first. 
+
+ObservationCount = Total
+ObservationCount1 = 1st minute + 2nd minute
+
+```{r pull multiple files, echo=FALSE, message=FALSE}
+
+require(plyr)
+
+mydir<-"output/2019"
+my.files<-list.files(path = mydir, patter ="*ObservationCount.csv", full.name=TRUE)
+obs<-ldply(my.files, read.csv)
+
+my.files<-list.files(path = mydir, patter ="*EventData.csv", full.name=TRUE)
+event.data<-ldply(my.files, read.csv)
+
+detach(package:plyr) #detach or this will cause an issue with dplyr
+
+```
+
+```{r anal.dat, echo = TRUE, message = FALSE}
+
+#select desired data columns for analysis
+anal.dat<-dat %>% select("CommonName", "species_id", "RouteIdentifier", "SiteCode", "collection", "ProtocolCode", "survey_day", "survey_month", "survey_year", "CollectorNumber", "latitude", "longitude", "StateProvince", "ObservationCount", "ObservationCount1", "date", "doy", "n_stop")
+
+#Need to have seperate columns for Route and Stops. This may vary by province and may not be needed in all instanaces.   
+#anal.dat<-anal.dat %>% separate(SiteCode, c("Route", "Stop"), sep="-") 
+#anal.dat$Route<-as.factor(anal.dat$Route)
+#anal.dat$Stop<-as.factor(anal.dat$Stop)
+
+## Generate species list for analysis. The speices that make the cut will vary on province based on the data manipulation
+species.list <- unique(anal.dat$CommonName)
+
+```
+
+We are ready to develope the species-specific analysis loop
+
+```{r sp.loop, echo = TRUE, message = FALSE}
+
+for(m in 1:length(species.list)) {
+
+m<-1 #for testing each species
+   
+  sp.data <-NULL 
+  sp.data <- filter(anal.dat, CommonName == species.list[m]) %>%
+      droplevels()
+  
+  print(paste("Currently analyzing species ", m, "/", species.list[m], sep = "")) 
+
+#zero fill by merging with the events dataframe. 
+sp.data <- left_join(event.data, sp.data, by = c("RouteIdentifier", "survey_year", "CollectorNumber")) %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0),                                                        ObservationCount1 = replace(ObservationCount1, is.na(ObservationCount1), 0))
+
+# Limit to species observed at least once per route 
+
+# summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropraite habitat))
+
+  site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
+  site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
+  site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
+  
+# limit raw data to these species, i.e., those that were observed at least once on a route 
+
+sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
+
+#count the number of owls per route as the response varaible. This may need to be changed if the number of stops on a route has change systematically over time. 
+sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, CollectorNumber) %>% summarise(count=sum(ObservationCount), count1=sum(ObservationCount1)) 
+ 
+#create the offset variable which is the number of routes run in a year to control for changes in effor over time. Previously I was using the log transformed nroute as an offset (E), however, this assumes that doubling the number of routes will double the number of owls counted, which may not hold true. The other option is to add nroute as a covariate in the model (Zuur 2018 pg 445). This was the option that was selected. It also make back tranformation easier.  
+nroute<-NULL
+nroute<-sp.data%>% group_by(survey_year) %>% summarise(nroute=n_distinct(RouteIdentifier))
+sp.data<-left_join(nroute, sp.data, by="survey_year")
+
+#create a first-year observer effect varaible 
+library(plyr)
+obs<-NULL #clear previous
+obs<- ddply(sp.data,~CollectorNumber,function(d)d[which.min(d$survey_year),]) 
+obs$ObsEffect<-1
+obs<-obs %>% select(-count, -count1, -nroute)
+
+#detach plyr once finished with it because it has a tendancy to mess up the dplyr packages  
+detach(package:plyr)
+library(dplyr) #sometime this will need reinstalled here(?)
+
+sp.data<-left_join(sp.data, obs, by=c("RouteIdentifier", "survey_year", "CollectorNumber"))
+sp.data<-sp.data %>% mutate(ObsEffect = replace(ObsEffect, is.na(ObsEffect), 0)) 
+ 
+#center date   
+sp.data <- sp.data %>% mutate(mean.yr = sum(min(survey_year) + max(survey_year))/2,
+	         cyear = survey_year - mean.yr,
+	         yearfac = as.factor(cyear)) %>% 
+	         #fyear = as.factor(survey_year)) %>% 
+	         select(-mean.yr)
+
+mean.yr<- sum(min(sp.data$survey_year) + max(sp.data$survey_year))/2
+
+#standardize route variables. may not be needed in new analysis  		
+#sp.data$croute<-standardize(sp.data$nroute) 
+
+#prepare variable for analysis
+sp.data$RouteIdentifier<-as.factor(sp.data$RouteIdentifier)
+sp.data$CollectorNumber<-as.factor(sp.data$CollectorNumber)
+sp.data$RouteObs<-paste(sp.data$RouteIdentifier, sp.data$CollectorNumber, sep="." )
+sp.data$RouteObs<-as.factor(sp.data$RouteObs)
+sp.data<-as.data.frame(sp.data)
+
+#Calucalte raw route mean for plotting 
+  mean<-NULL
+  mean<-sp.data %>% group_by(survey_year, nroute) %>%       summarize(mean=mean(count), logmean=log(mean)) %>% 
+  select(-nroute)
+  sp.data<-left_join(sp.data, mean, by="survey_year")
+
+  
+  #######################
+###Creating the GLM model###
+  #######################
+
+##Model formula for overdispersed poisson##
+#This is used to model overdispersion f(id.iid, model="iid") 
+#Overdispersed Poisson with no spatail autocorrelation effect  
+  
+#once strata is added to the model the variace of the random year effect should be nested within the strata  
+
+inla.formula1 <- count1 ~ cyear + ObsEffect + f(RouteObs, model = "iid") + f(yearfac, model = "ar1") + f(id.iid, model="iid")
+
+trend_op<-NULL
+trend_op<-inla(inla.formula1, family = "poisson", data = data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.predictor = list(compute=TRUE), control.compute = list(config=TRUE, dic=TRUE))
+
+#Dispersion Statistic Overdospersion Model
+mu.op<-trend_op$summary.fitted.values[,"mean"]
+E.op<-(sp.data$count-mu.op)/ sqrt(mu.op) #Pearson residuals
+N<-nrow(sp.data)
+p<-nrow(trend_op$summary.fixed)
+Dispersion.op<-sum(E.op^2)/(N-p)
+print(paste("Dispersions Statistic Overdispersed = ", Dispersion.op, sep = "")) 
+
+#Create model matrix for linear combinations. Needs to include cyear and croute
+myData_op<-NULL
+myData_op<-data.frame(sp.data$cyear)
+myData_op<-rename(myData_op, c("sp.data.cyear"="cyear", "croute.std"="croute"))
+xmato<-model.matrix(~cyear, data=sp.data)
+xmato<-as.data.frame(xmato)
+lcbo<-inla.make.lincombs(xmato)
+
+trend_lcbo<-inla(inla.formula1, family = "poisson", lincomb=lcbo, control.inla = list(lincomb.derived.only=FALSE), control.predictor = list(compute=TRUE, quantiles=c(0.025, 0.975)), data = data.frame(sp.data, id.iid = 1:nrow(sp.data)), control.compute = list(config=TRUE, dic=TRUE))
+
+myData_op<-cbind(myData_op, trend_lcbo$summary.lincomb[,c("mean", "0.025quant", "0.975quant")])
+
+#Back standardize year
+myData_op$year<-  myData_op$cyear+mean.yr
+
+#rename columns
+myData_op<-rename(myData_op, c("mean"="mu", 
+                         "0.025quant"="selo", 
+                         "0.975quant"="seup"))
+
+#Back tranform the mean count value using the helper function since we are using a log link (Zuur 2017, pg. 179). This takes alot of time. Go have a coffee. 
+  pred.marg.op<-trend_lcbo$marginals.lincomb.derived
+  myData_op$mu<-unlist(lapply(pred.marg.op, function(x) inla.emarginal(exp,x)))
+  myData_op$selo<-unlist(lapply(pred.marg.op, function(x) inla.qmarginal(c(0.025),   inla.tmarginal(exp,x))))
+  myData_op$seup<-unlist(lapply(pred.marg.op, function(x) inla.qmarginal(c(0.975),   inla.tmarginal(exp,x))))
+  myData_op<-distinct(myData_op)
+
+ggplot()+
+  geom_jitter(data=sp.data, aes(y=count, x=survey_year))+
+  xlab("Year")+
+  ylab("Route Count")+
+  ggtitle(paste("Population trends for ", species.list[m], sep=""))+
+  theme_light()+
+  theme(text=element_text(size=15))+
+  geom_line(data=myData_op, aes(x=year, y=mu), colour="black")+
+  geom_ribbon(data=myData_op, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
+
+
+###Creating the GAM model###
+
+#Non-linear patterns in residual can be deal with using a quadratic of cubic term, however, they quickly result in poor model fit (Zuur 2018, pg 450). So we will try to fit a more complex model with a smoother to quantify the term 'function(cyear)'. 
+
+#The BBbayes uses a 3rd (cubic) degree polynomial spline using the jagam function in the R-package mgcv. Similarly, we will include one knot for  every 4 years in the time-series (Smith and Edwards 2020)
+
+#k<-trunc((max.yr-min.yr)/4)
+#Need to keep constant or the code below won't work. For a 20 year time period k=4, if a 10 year time period k=2.
+
+#We use the smoothCon function in mgcv to obtain the basis function. We do not include an intercept in the smoother 
+sm<-smoothCon(s(cyear, bs="cr", k=4, fx=TRUE), data=sp.data, absorb.cons=TRUE)[[1]]
+Xcr<-sm$X
+nc<-ncol(Xcr)
+xnames<-paste("x", 1:nc, sep="")
+colnames(Xcr)<-xnames
+
+lcs<-inla.make.lincombs(x1=Xcr[,"x1"], 
+                        x2=Xcr[,"x2"], 
+                        x3=Xcr[,"x3"])
+
+sp.data2<-cbind(sp.data, Xcr)
+
+inla.formula3 <- count ~ 1 + x1 + x2 + x3 + f(RouteObs, model = "iid") + f(yearfac, model = "ar1") + f(id.iid, model="iid")
+
+trend_cr<-inla(inla.formula3, family = "poisson", lincomb=lcs, control.inla = list(lincomb.derived.only=FALSE),  data = data.frame(sp.data2, id.iid = 1:nrow(sp.data)), control.compute = list(config=TRUE, dic=TRUE), quantiles = c(0.025, 0.975))
+
+#Dispersion Statistic GAM 
+mu.cr<-trend_cr$summary.fitted.values[,"mean"]
+E.cr<-(sp.data$count-mu.cr)/ sqrt(mu.cr) #Pearson residuals
+N<-nrow(sp.data)
+p<-nrow(trend_cr$summary.fixed)
+Dispersion.cr<-sum(E.cr^2)/(N-p)
+print(paste("Dispersions Statistic Overdispersed GAM = ", Dispersion.cr, sep = ""))
+
+myData_cr<-NULL
+myData_cr<-data.frame(mu.cr=f, 
+                   selo=selo, 
+                   seup=seup, 
+                   cyear=sp.data2$cyear, 
+                   ID=rep("4 knots", nr))
+
+#Back standardize year
+myData_cr$year<-  myData_cr$cyear+mean.yr
+
+#Back tranform the mean count value using the helper function since we are using a log link (Zuur 2017, pg. 179). This takes alot of time. Go have a coffee. 
+  pred.marg.cr<-trend_cr$marginals.lincomb.derived
+  myData_cr$mu<-unlist(lapply(pred.marg.cr, function(x) inla.emarginal(exp,x)))
+  myData_cr$selo<-unlist(lapply(pred.marg.cr, function(x) inla.qmarginal(c(0.025),   inla.tmarginal(exp,x))))
+  myData_cr$seup<-unlist(lapply(pred.marg.cr, function(x) inla.qmarginal(c(0.975),   inla.tmarginal(exp,x))))
+  myData_cr<-as.data.frame(myData_cr)
+  myData_cr<-distinct(myData_cr)
+  
+  
+#This calculates the non-backtranformed values
+#Smoother<-trend_cr$summary.lincomb.derived
+#nr<-nrow(Xcr)
+#f<-Smoother[1:nr, "mean"]
+#selo<-Smoother[1:nr, "0.025quant"]
+#seup<-Smoother[1:nr, "0.975quant"]
+
+
+ggplot()+
+  geom_line(data=myData_cr, aes(x=year, y=mu))+
+  geom_ribbon(data=myData_cr, aes(x=year, ymax=seup, ymin=selo), alpha=0.6)+
+  xlab("Year")+
+  ylab("Mean Route Count")+
+  ggtitle(paste("Population trend for ", species.list[m], sep=""))+
+  theme_light()
+
+ggplot()+
+  geom_jitter(data=sp.data, aes(y=count, x=survey_year))+
+  xlab("Year")+
+  ylab("Mean Route Count")+
+  ggtitle(paste("Population trends for ", species.list[m], sep=""))+
+  theme_light()+
+  theme(text=element_text(size=15))+
+  geom_line(data=myData_op, aes(x=year, y=mu), colour="blue")+
+  geom_ribbon(data=myData_op, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)+
+  geom_line(data=myData_cr, aes(x=year, y=mu), colour="red")+
+  geom_ribbon(data=myData_cr, aes(x=year, ymax=seup, ymin=selo), alpha=0.3)
+
+
+##Compare Model DIC to select the best model
+
+DIC<-c(trend_op$dic$dic, trend_zip$dic$dic, trend_cr$dic$dic)
+DIC 
+
+#Residuals E1.op & E.cr
+#Fitted values mu.op & mu.cr
+#Plot residuals and fitted values you will notice an obvious pattern. 
+plot(mu.op, E.op)
+plot(mu.cr, E.cr)
+plot(mu.zip, E.zip)
+
+#Now plot to observed data versus the residuals to check for good model fit. 
+#If it falls on a 45degree angle we have good fit. 
+#One problem with this appraoch is we often have lots of zeros, which can make the interpreations of scatter plots more difficult. 
+
+plot(sp.data$count, E.op)
+plot(sp.data$count, E.cr)
+plot(sp.data$count, E.zip)
+
+#Lets work through a Posterior Predictive check next. 
+
+
+} #end species loop
+
+
+```
