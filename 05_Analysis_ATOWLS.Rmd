@@ -369,6 +369,16 @@ tau_p3 <- ggplot() +
   theme_map() + theme(panel.grid.major=element_line(colour="transparent"))
  multiplot(tau_p1, tau_p3, tau_p2, cols=2)
  
+ 
+# aggregate results ------------------------------------------------------------
+# summarise at bcr
+new_bcr <- post_sum %>% group_by(bcr) %>%
+  summarise(new_med_tau=median(tau), new_med_prec=median(tau_iw),
+            new_min_prec=min(tau_iw), new_max_prec=max(tau_iw))
+
+
+
+
 
 } #end species loop
 ```
