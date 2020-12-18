@@ -104,7 +104,7 @@ Filter out the speices that we don't want (e.g., Woodcock, Snipe), but keep the 
 
 ```{r filterspecies, echo = TRUE, message = FALSE}
 
-##THIS IS CAUSING AN ERROR##
+##THIS IS CAUSING AN ERROR IF USED HERE##
 #in.data <- in.data %>% filter (CommonName %in% c("Barred Owl", "Boreal Owl", "Great Gray Owl", "Great Horned Owl", "Northern Saw-whet Owl", "Eastern Screeh-Owl", "Western Screech-Owl", "Long-eared Owl", "Short-eared Owl", "Northern Hawk Owl", "Northern Pygmy-Owl", "Snowy Owl", "Barn Owl", "Flammulated Owl") | is.na(CommonName))
 
 ```
@@ -127,7 +127,7 @@ Gather the parameters you need from the analysis parameters file
 #loop through each row in the analysis parameter files is doing multiple protocol
 for(k in 1:nrow(anal.param)) {
 
-#k<-11# manualy specify the row in the Analysis Parameters file to be run. 
+k<-1 #manualy specify the row in the Analysis Parameters file to be run. 
 
 max.yr <- 2019 #already specified in the setup, but doing it again here
 protocol_id<-anal.param[k,"protocol_id"]
@@ -141,9 +141,13 @@ temp <- anal.param[k,"temp"]
 dat<-in.data %>% filter(ProtocolCode == protocol_id)
 dat$ObservationCount[is.na(dat$ObservationCount)] <- 0
 
-#reassign ON route to QC
+#reassign routes to correct provinces
 if(protocol_id=="35"){
 dat$StateProvince[dat$StateProvince  == "ON"]  <- "QC"  
+}
+
+if(protocol_id=="39"){
+dat$StateProvince[dat$StateProvince  == "PE"]  <- "NS"  
 }
 
 #Subset data to specified year range
@@ -152,26 +156,26 @@ dat <- dat %>% filter(survey_year >= min.yr & survey_year <= max.yr)
 
 #Create data summary prior to filtering
 #nroute/year
-route1<-dat %>% group_by(survey_year) %>% summarize(nroute_unfiltered=n_distinct(RouteIdentifier))
+#route1<-dat %>% group_by(survey_year) %>% summarize(nroute_unfiltered=n_distinct(RouteIdentifier))
 
 #nstop/route
-stops<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(nstops=n_distinct(SiteCode))
-stops<-cast(stops, RouteIdentifier~survey_year, value="nstops")
-write.csv(stops, paste(out.dir, collection, ".", protocol_id, ".StopsSummary.csv", sep=""))
+#stops<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(nstops=n_distinct(SiteCode))
+#stops<-cast(stops, RouteIdentifier~survey_year, value="nstops")
+#write.csv(stops, paste(out.dir, collection, ".", protocol_id, ".StopsSummary.csv", sep=""))
 
 #Speices/year level summary
-stat.sp1<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount))
+#stat.sp1<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount))
 
-if(protocol_id=="44d"){
-  stat.sp1 <- stat.sp1 %>% filter(survey_year!=2002) %>% filter(survey_year!=2010) %>% droplevels()
-} #end if protocol id 44d
+#if(protocol_id=="44d"){
+#  stat.sp1 <- stat.sp1 %>% filter(survey_year!=2002) %>% filter(survey_year!=2010) %>% droplevels()
+#} #end if protocol id 44d
 
-if(protocol_id=="100"){
- stat.sp1 <- stat.sp1 %>% filter(survey_year!=2000) %>% droplevels()
-}
+#if(protocol_id=="100"){
+# stat.sp1 <- stat.sp1 %>% filter(survey_year!=2000) %>% droplevels()
+#}
 
-sp.dat1<-cast(stat.sp1, CommonName~survey_year, value="count")
-sp.dat1$Filter<-"unfilter"
+#sp.dat1<-cast(stat.sp1, CommonName~survey_year, value="count")
+#sp.dat1$Filter<-"unfilter"
 
 #Filtering the data to standardized detectability, and remove routes and speices that don't mean minimum cutoff requirements. In this step we also create the zero fill matrix. 
 
@@ -202,7 +206,7 @@ stop.year<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(n_stop=n
 dat<-left_join(dat, stop.year, by=c("RouteIdentifier", "survey_year"))
 dat<-dat %>% filter(n_stop>=5) 
 
-#Because in the early years the Ontario owls program ran upwards of 4 surveys/ route/ year, the douplicates will need to be removed
+#Because in the early years the Ontario owls program ran upwards of 4 surveys/ route/ year, the duplicates will need to be removed
 if(collection=="ONOWLS"){
   
 #since there is no window field we need to select the last survey date for those that have multiple surveys per rount within a year
@@ -236,19 +240,21 @@ dat<-dat%>% select(-sample_events, -minday, -check)
 #Now that the surveys are removed that were done in inapproparite envrionmnetal conditions and routes are removed that were not run in enough years we can make a list of unique sampling events to use for zero-filling species-specific dataframes. We don't zero-fill the entire dataframe for space issues. Note: Since our response variable in the analysis is counts at the Route level, the sampling event is a route within a year. If the analysis is changes to be at the stop level, this will need to be changed.   
 
 event.data <-NULL #clear old
-event.data <- dat %>%
-  select(RouteIdentifier, survey_year, CollectorNumber, n_stop) %>%   
+event.data<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "Stop"), sep="-", remove=FALSE) %>% select (-del1, -del2)
+event.data<-event.data %>% filter(Stop==1) %>% filter (!is.na(latitude), !is.na(longitude)) #because we want the lat long of the start location of the route. Remove routes with no start lat long.
+event.data <- event.data %>%
+  select(RouteIdentifier, survey_year, CollectorNumber, n_stop, latitude, longitude, StateProvince, bcr, ) %>%   
   distinct() %>%
   ungroup() %>%
   as.data.frame()
 
 #Create data summary after creating the sampling events data layer.
 #nroute/year
-route2<-dat %>% group_by(survey_year) %>% summarize(nroute_filter=n_distinct(RouteIdentifier))
+#route2<-dat %>% group_by(survey_year) %>% summarize(nroute_filter=n_distinct(RouteIdentifier))
 
 #nstop/route
-stops2<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(nstops=n_distinct(SiteCode))
-stops2<-cast(stops2, RouteIdentifier~survey_year, value="nstops")
+#stops2<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(nstops=n_distinct(SiteCode))
+#stops2<-cast(stops2, RouteIdentifier~survey_year, value="nstops")
 
 #Species must be detected on at least half of all years surveyed.  
 min.yrs.detect<-trunc(length(unique(dat$survey_year))/2)
@@ -280,9 +286,9 @@ dat <- left_join(df.abund, dat, by = c("CommonName")) %>%
   as.data.frame()
 
 #Species/year level summary after filters 
-stat.sp2<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount))
-sp.dat2<-cast(stat.sp2, CommonName~survey_year, value="count")
-sp.dat2$Filter<-"filter"
+#stat.sp2<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount))
+#sp.dat2<-cast(stat.sp2, CommonName~survey_year, value="count")
+#sp.dat2$Filter<-"filter"
 
 #now we want to just keep the observation records that were made in the first 2 min silent listening period (ObservationCount2 or ObservationCount3)
 
@@ -320,35 +326,35 @@ dat1 <- left_join(df2.abund, dat1, by = c("CommonName")) %>%
   as.data.frame()
 
 #Species/year level summary after Observation1 created  
-stat.sp3<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount1))
-sp.dat3<-cast(stat.sp3, CommonName~survey_year, value="count")
-sp.dat3$Filter<-"2 min obs"
+#stat.sp3<-dat %>% group_by(survey_year, CommonName) %>% summarize(count=sum(ObservationCount1))
+#sp.dat3<-cast(stat.sp3, CommonName~survey_year, value="count")
+#sp.dat3$Filter<-"2 min obs"
 
 #Bind and write tables to output file
 #the following are causing issue with the cbind.
 #some issues with the BC FLAM data. Not enought records in 2010 to meet min data requirements
 
-if(protocol_id=="44d"){
-  route1 <- route1 %>% filter(survey_year!=2002) %>% filter(survey_year!=2010) %>% droplevels()
-  } #end if protocol id 44d
+#if(protocol_id=="44d"){
+#  route1 <- route1 %>% filter(survey_year!=2002) %>% filter(survey_year!=2010) %>% droplevels()
+#  } #end if protocol id 44d
 
-if(protocol_id=="100"){
- route1 <- route1 %>% filter(survey_year!=2000) %>%  droplevels()
-} #end if protocol id 100
+#if(protocol_id=="100"){
+# route1 <- route1 %>% filter(survey_year!=2000) %>%  droplevels()
+#} #end if protocol id 100
 
-route<-full_join(route1, route2, by="survey_year")
-write.csv(route, paste(out.dir, collection, ".", protocol_id, ".RouteYearSummary.csv", sep=""))
+#route<-full_join(route1, route2, by="survey_year")
+#write.csv(route, paste(out.dir, collection, ".", protocol_id, ".RouteYearSummary.csv", sep=""))
 
-sp.dat<-rbind(sp.dat1, sp.dat2, sp.dat3)
-sp.dat<-arrange(sp.dat, CommonName)
-write.csv(sp.dat, paste(out.dir, collection, ".", protocol_id, ".SpYearSummary.csv", sep=""))
+#sp.dat<-rbind(sp.dat1, sp.dat2, sp.dat3)
+#sp.dat<-arrange(sp.dat, CommonName)
+#write.csv(sp.dat, paste(out.dir, collection, ".", protocol_id, ".SpYearSummary.csv", sep=""))
 
 #print the final data to file
-#write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".ObservationCount.csv", sep=""))
-#write.csv(dat1, paste(out.dir, collection, ".", protocol_id, ".ObservationCount1.csv", sep=""))
+write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".ObservationCount.csv", sep=""))
+write.csv(dat1, paste(out.dir, collection, ".", protocol_id, ".ObservationCount1.csv", sep=""))
 
 #print the event.data to file 
-#write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
+write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
 
 } #end loop
 
