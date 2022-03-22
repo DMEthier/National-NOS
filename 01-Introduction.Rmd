@@ -1,0 +1,30 @@
+# Introduction {#Intro1}
+
+```{r tidyr1, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy = FALSE)
+
+```
+
+## The Nocturnal Owl Survey {#Intro1.1}
+
+Owls are considered valuable indicators of forest ecosystem health because of their dependence on relatively large tracts of forest, sensitivity to logging and forest fragmentation, and as a top predator are responsive to trophic dynamics as well as environmental conditions (e.g., chemical contaminant). However, because of their secretive, primarily nocturnal behaviour, and relatively low densities there is little known about the abundance and population status of most nocturnal owl species in Canada. Existing monitoring programs, such as the Breeding Bird Survey (BBS) and Christmas Bird Count (CBC), are inadequately designed to track their status. Specifically, the BBS is done early in the morning when the detection of nocturnal species is low, and CBC has few counts conducted in the north, and the time spent 'owling' is not standardized, making these results difficult to interpret.
+
+In 2001, a national protocol was developed to guide volunteer-based nocturnal owl surveys in Canada (Takats et al. 2001). Like the BBS, which is North American's leading source for information on \>700 breeding land birds, the Nocturnal Owl Survey (NOS) was designed to be the national standard for monitoring an otherwise overlooked avian group. The primary objectives of the NOS are to (1) provide robust and consistent counts of owls that can be used to obtain scientifically credible measures of the status and trends of owls at continental and regional scales, (2) identify priority species for conservation, and (3) provide resource managers annual data for model-based conservation planning. Further, the program was intended to offer an organized opportunity for volunteers to contribute to our understanding of owl ecology and increase public appreciation for this rarely seen avian group.
+
+Using similar standards as the BBS, the NOS adopted a roadside survey protocol which collects counts of owls at evenly spaced stops during the breeding season (which varies regionally from mid-February to May). At each stop, a citizen scientist trained in owl vocalizations conducts a 2-minute point count (silent listening period), followed by an optional broadcast survey to elicit responses from local target species. Surveys begin 30 minutes after sunset and take approximately 3 hours to complete. Routes are sampled once per year, with the total number of routes sampled growing over time. In addition to counting the number of owls, this dataset contains auxiliary information on the survey including local environmental covariates which can be used to assess and standardize detection probability.
+
+## Purpose {#Intro1.2}
+
+The purpose of this book is to empower provincial resource managers, research scientists, and students to access and manipulate the National Nocturnal Owls Survey dataset housed in Birds Canada's National Data Centre: [NatureCounts](www.naturecounts.ca). The current focus of the book is on data cleaning, summary statistics, mapping and trends analysis.
+
+## Prerequisites {#Intro1.3}
+
+This book assumes that you have a basic understanding of R. We recommend that you become familiar with ['R for Data Science'](http://r4ds.had.co.nz/) by Garrett Grolemund and Hadley Wickham, which covers how to import, visualize, and summarize data in R using the [tidyverse](https://www.tidyverse.org/) collection of R packages.
+
+We also recommend you review the [NatureCounts: An Introductory Tutorial](link%20to%20be%20provided) to familiarize yourselves with how to import, manipulate, and visualize [NatureCounts](www.naturecounts.ca) data using the `naturecounts` R package.
+
+## Acknowledgements {#Intro1.4}
+
+Nocturnal Owl Surveys across Canada attracts over 1000 volunteers each year. [Birds Canada](https://www.birdscanada.org/) staff manage most provincial NOS programs, except for in Alberta and Manitoba. The raw data are archived in [NatureCounts](www.naturecounts.ca), which is a node of the international [Avian Knowledge Network](www.avianknowledge.net).

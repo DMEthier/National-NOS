@@ -1,0 +1,17 @@
+collection,protocol_id,min.year,max.year,temp,min.doy,max.doy,interval,notes
+ATOWLS,37,2001,,-15,91,151,2,#New Brunswick
+ATOWLS,39,2002,,-15,91,151,2,#Nova Scotia
+ATOWLS,40,2001,,-15,91,151,2,#PEI
+ATOWLS,,2018,,-15,91,151,2,#StateProv == Newfoundland. Delete from data. No protocol_id assigned. 
+BCOWLS,44c,2000,,-15,91,120,1,#BC Northern (Yukon and NWT. Will want to remove all NWT sites started in 2019). Will need to use site code to parse out the protocols. 
+BCOWLS,44b,2000,,-10,60,105,2,#BC South Interior. Will need to use site code to parse out the protocols. 
+BCOWLS,44a,2000,,-10,32,74,1,#BC Coastal. Will need to use site code to parse out the protocols. 
+BCOWLS,44d,2002,,0,140,166,1,"#FLAM, check that the temperature cut off is not too restrictive. Will need to use site code to parse out the protocols. "
+MBOWLS,29,,2000,,,,,#old playback protocol pre-2000. These data will not be used for the trend analysis
+MBOWLS ,27,2000,,-20,74,105,1,#new methodology post-2000. These are the data to be used for the trend analysis
+ONOWLS,22,1995,,-20,87,131,2,#north region
+ONOWLS,36,1995,,-20,87,131,2,#central region
+QCOWLS,35,2008,,-15,91,130,1,#does not have a unique route identifier. Will need to parse out from the Locality
+SKOWLS,100,2000,,-20,74,120,2,
+ABOWLS ,,2002,,-20,79,128,1,#Boreal survey protocol. Does not exist in NC
+ABOWLS ,,2002,,-20,79,128,1,#Prairie survey protocol. Does not exist in NC

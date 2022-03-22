@@ -1,0 +1,150 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+# Mapping {#Map1}
+
+```{r tidyr4, echo = FALSE, message = FALSE, warning = FALSE}
+
+library(knitr)
+opts_chunk$set(tidy.opts=list(width.cutoff=50), tidy = FALSE)
+
+```
+
+Here we are going to map the Sites on a Route using the latitude and longitude for each province as part of the QAQC for the owls data. 
+
+Load the packages you will need: 
+```{r loadpackages2, echo = FALSE, message = FALSE}
+
+library(rgdal)
+library(sf)
+library(ggmap)
+library(leaflet)
+library(mapview)
+library(rnaturalearth)
+
+```
+
+Code to create Provincial plots through time using the unfiltered data
+
+```{r plotprov, echo = TRUE, message = FALSE}
+
+#Will want to loop through `collection` when the data are ready
+prov<-unique(in.data$collection)
+
+for(t in 1:length(prov)) {
+
+#  t<-13 #for testing individual provinces
+  
+plot.data<-subset(in.data, collection==prov[t])
+
+plot.data<-plot.data %>% select(RouteIdentifier, survey_year, latitude, longitude) %>% distinct()
+
+plot.data$survey_year<-as.factor(plot.data$survey_year)
+plot.data<-plot.data %>% filter (!is.na(latitude), !is.na(longitude))
+
+#Create a spatial dataframe
+
+plot_sf <- st_as_sf(plot.data, coords = c("longitude", "latitude"), crs = 4326)
+
+#Create the base layer map
+map <- get_stamenmap(bbox = as.numeric(st_bbox(plot_sf)), zoom = 5)
+
+#Create a new plot for each year
+plot<-ggmap(map) + 
+  geom_point(data = plot.data, aes(x = longitude, y = latitude, colour = survey_year))+
+  facet_wrap( ~ survey_year, ncol=5)
+
+  
+print(plot)
+
+}
+```
+
+Code to create National plots 
+
+```{r plotnational, echo = TRUE, message = FALSE}
+
+#use full dataset (could also include site code if you want to have the stop on the route shown. I don' think this is necessary at the national scale. Just one point per route)
+plot.data<-in.data %>% select(ObservationCount, RouteIdentifier, survey_year, latitude, longitude) %>% distinct()
+
+#remove NA in lat and long
+plot.data<-subset(plot.data, !is.na(latitude)) 
+plot.data<-subset(plot.data, !is.na(longitude)) 
+plot.data$survey_year<-as.factor(plot.data$survey_year)
+
+#remove outliers. Should be fixed in underlying data. 
+plot.data <- plot.data %>%filter(!(RouteIdentifier %in% c("ON0233", "ON0328", "PE010", "QC062", "ON0099")))
+
+#Create a spatial dataframe
+plot_sf <- st_as_sf(plot.data, coords = c("longitude", "latitude"), crs = 4326)
+
+#Load map of Canada
+canada <- ne_states(country = "canada", returnclass = "sf") %>%
+  st_transform(3347)
+
+#plot data to the map
+plot<-ggplot() +
+  theme_bw() +
+  geom_sf(data = canada) +
+  geom_sf(data = plot_sf, size = 0.5)
+
+print(plot)
+
+#Interactive Map
+#range of year = 1991, 2020
+#mapview(plot_sf, zcol = "survey_year", map.types = "Esri.WorldImagery")
+```
+
+
+
+## Set plot and map themes {#Setup2.5}
+
+This may be moved to a later part of the script. Not need here.
+
+```{r plottheme echo=FALSE, message=FALSE}
+# plot theme
+theme_timeseries <- function (base_size = 11, base_family = "") {
+  theme_grey(base_size = base_size, base_family = base_family) %+replace%
+    theme(panel.background = element_rect(fill = "white", colour = NA),
+          panel.border = element_rect(fill = NA, colour = "grey20"),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          axis.text.x = element_text(size = rel(0.9), angle = 0),
+          axis.text.y = element_text(size = rel(0.9), angle = 0),
+          strip.background = element_rect(fill = "grey80"),
+          legend.key = element_rect(fill = "white", colour = NA),
+          plot.title = element_text(size=14, hjust = 0.5,
+                                    margin=margin(t=5, b=10)),
+          legend.position="right",
+          complete = TRUE)
+}; theme_set(theme_timeseries())
+
+# map theme
+theme_map <- function(base_size = 9, base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) %+replace%
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_blank(),
+          panel.grid = element_blank(),
+          panel.spacing = unit(0, "lines"),
+          plot.background = element_blank(),
+          legend.background=element_rect(fill=NA, colour=NA),
+          legend.direction="vertical",
+          legend.key=element_rect(fill=NA, colour="white"),
+          legend.text.align=1,
+          legend.text = element_text(size=9),
+          legend.title=element_text(hjust=0, size=11),
+          legend.justification=c(0, 0.5),
+          plot.title = element_text(size=14, hjust = 0.7))
+}
+
+options(scipen=9999999)
+options(max.print=99999)
+options(stringsAsFactors=F)
+
+```
