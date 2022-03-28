@@ -83,10 +83,10 @@ library(scales)
 
 ## Directories {#Setup2.3}
 
-Create a directory for analytical data and outputs. This will be placed in your
-current working directory. The location of your current directory is
-printed in the upper left hand corner of the RStudio console next to the
-R symbol.
+Create a directory for analytical data and outputs. This will be placed
+in your current working directory. The location of your current
+directory is printed in the upper left hand corner of the RStudio
+console next to the R symbol.
 
 ```{r outdir echo = FALSE, message = FALSE}
 
@@ -103,8 +103,7 @@ dat.dir <- paste("data/")
 A file was created that outlines analysis parameters for various
 Provinces.
 
-**Alberta still needs assigned a protocol_id**
-**Need to double check which provinces have 2 listening periods in the database**
+**Alberta still needs assigned a protocol_id. Need to double check which provinces have 2 listening periods in the database**
 
 Column definitions
 
@@ -116,10 +115,6 @@ Column definitions
     out using auxiliary data (e.g., BCOWLS uses the BCregions to
     differentiate protocol_id)
 
--   interval: indicates if the two minute silent listening periods is
-    recorded in 1 or 2 data columns. If 2 data columns then these
-    datasets are ideal for modelling the detection process
-
 -   min.year: start year of survey
 
 -   max.year: end year of survey, or set to NA if ongoing
@@ -130,15 +125,20 @@ Column definitions
 
 -   max.doy: the latest day of the year a survey should be run
 
+-   interval: indicates if the two minute silent listening periods is recorded in 1 or 2 data columns. If 2 data columns then these datasets are ideal for modelling the detection process
+
+-   obs: the observation count type that should be used for the national analysis.
+
 ```{r load parameters echo = FALSE, message = FALSE}
 
 #These tables are available on Github 
 
 #Main Analysis Parameters file 
-anal.param<-read.csv("Analysis Parameters.csv") 
+anal.param<-read.csv("Analysis Parameters.csv")
+#remove sites that we don't want for the national analysis
+anal.param<-anal.param %>% filter(!is.na(protocol_id)) %>% filter(protocol_id!=29)
 
 #BC specific
 BCregion<-read.csv("Regions_BCY.csv")
 
 ```
-
