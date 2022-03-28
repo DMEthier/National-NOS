@@ -103,7 +103,8 @@ dat.dir <- paste("data/")
 A file was created that outlines analysis parameters for various
 Provinces.
 
-**Alberta still needs assigned a protocol_id. Need to double check which provinces have 2 listening periods in the database**
+**Alberta still needs assigned a protocol_id. Need to double check which
+provinces have 2 listening periods in the database**
 
 Column definitions
 
@@ -125,9 +126,12 @@ Column definitions
 
 -   max.doy: the latest day of the year a survey should be run
 
--   interval: indicates if the two minute silent listening periods is recorded in 1 or 2 data columns. If 2 data columns then these datasets are ideal for modelling the detection process
+-   interval: indicates if the two minute silent listening periods is
+    recorded in 1 or 2 data columns. If 2 data columns then these
+    datasets are ideal for modelling the detection process
 
--   obs: the observation count type that should be used for the national analysis.
+-   obs: the observation count type that should be used for the national
+    analysis.
 
 ```{r load parameters echo = FALSE, message = FALSE}
 

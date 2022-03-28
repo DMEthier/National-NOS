@@ -169,12 +169,8 @@ loc.dat <-NULL #clear old
 #Using SamplingEvent
 loc.dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "Stop"), sep="-", remove=FALSE) %>% select (-del1, -del2)
 
+loc.dat<-loc.dat %>% filter(latitude!="NA") %>% arrange(Stop) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, bcr)
 
-
-#We want the lat long of the start location of each route. Remove routes with no start lat long.
-loc.dat<-loc.dat %>% filter(Stop==1) %>% filter (!is.na(latitude), !is.na(longitude)) %>% select(RouteIdentifier, Stop, latitude, longitude, StateProvince, bcr) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(-Stop)
-
-write.table(loc.dat, paste(out.dir, "Location.csv"), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
 
 ##____________________________________________________________________
 #Because in the early years the Ontario owls program ran upwards of 4 surveys/route/year, the duplicates will need to be removed. We run this script for all province since there are some other doublicate routes that have snuck into the assessment. 
@@ -243,13 +239,13 @@ dat<-left_join(dat, stop.year, by=c("RouteIdentifier", "survey_year"))
 
 event.data <-NULL #clear old
 event.data <- dat %>%
-  select(RouteIdentifier, survey_year, CollectorNumber, nstop, StateProvince, bcr) %>%  
+  select(RouteIdentifier, survey_year, CollectorNumber, nstop, StateProvince) %>%  
   distinct() %>%
   ungroup() %>%
   as.data.frame()
 
 #merge with the loc.data to assign unique lat long to each route
-event.data<-left_join(event.data, loc.dat, by=c("RouteIdentifier", "StateProvince", "bcr"))
+event.data<-left_join(event.data, loc.dat, by=c("RouteIdentifier"))
 
 ##____________________________________________________________________
 #Because we have different data collection methods, the response variable for each protocol may be ObservationCount2+ObservationCount3 = ObservationCount OR ObservationCount depending on how the data are recorded. The Analysis Parameters files will specify this for each protocol under the `obs` column. 
