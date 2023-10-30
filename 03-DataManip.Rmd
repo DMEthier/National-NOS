@@ -120,6 +120,24 @@ in.data<-format_dates(in.data)
 
 ```
 
+Create the output tables for writing the data cleaning results
+```{r output tables}
+
+Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
+   names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "bcr")
+
+#only need to create the table once per analysis   
+write.table(Events, file = paste(out.dir,  "QC_Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 10, byrow = FALSE, dimnames = NULL))
+   names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "ProtocolCode", "doy",  "CommonName", "ObservationCount", "StateProvince")
+
+#only need to create the table once per analysis   
+write.table(Owls, file = paste(out.dir,  "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+```
+
+
 In this step, we filter the data based on the `Analysis Parameters` file. For example, we will remove surveys done in inappropriate weather conditions. While we can also remove surveys done outside the appropriate survey window (min.day, max.day) it was decided by the national NOS committee not to proceed with this step since survey timing of often tweaked to accommodate weather.
 
 ```{r dataclean, echo = TRUE, message = FALSE}
@@ -127,9 +145,9 @@ In this step, we filter the data based on the `Analysis Parameters` file. For ex
 #loop through each row in the analysis parameter files is doing multiple protocol
 for(k in 1:nrow(anal.param)) {
   
-#k<-1 # manually specify the row in the Analysis Parameters file to be run. 
+k<-13 # manually specify the row in the Analysis Parameters file to be run. Currently set to QC
 
-max.yr <- 2021 #set to the maximum year of current data
+max.yr <- 2023 #set to the maximum year of current data
 
 #Note: data from 2020 will be incomplete for most provinces due to COVID19. At the time of writing, not all 2021 data were proofed in NatureCounts and may be missing
 
@@ -143,6 +161,13 @@ max.doy <- anal.param[k,"max.doy"]
 temp <- anal.param[k,"temp"]
 obs<-anal.param[k,"obs"]
 
+#adjust to add a 7 day buffer on either side
+
+if(protocol_id=="35"){ #Add buffer to QC data for cleaning. Others may also request this filter be adjusted. 
+min.doy <- min.doy-7
+max.doy <- max.doy+7
+}
+
 #subset data based on protocol_ID 
 dat<-NULL
 dat<-in.data %>% filter(ProtocolCode == protocol_id)
@@ -153,8 +178,10 @@ dat$ObservationCount<-as.numeric(dat$ObservationCount)
 if(protocol_id=="35"){
 dat$StateProvince[dat$StateProvince  == "ON"]  <- "QC"  
 
-dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "StopNo"), sep="-", remove=FALSE) %>% 
-  dplyr::select (-del1, -del2) %>% mutate(SiteCode= paste(RouteIdentifier, StopNo, sep="-")) %>% select(-StopNo)
+dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "StopNo"), sep="-", remove=FALSE) %>% dplyr::select (-del1, -del2) %>% mutate(SiteCode2= paste(RouteIdentifier, StopNo, sep="-")) %>% select(-StopNo)
+
+dat<-dat %>% mutate(SiteCode = ifelse(is.na(SiteCode), SiteCode2, SiteCode)) %>% select(-SiteCode2)
+
 }
 
 #Subset data to specified year range
@@ -171,42 +198,19 @@ loc.dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "Stop"), se
 
 loc.dat<-loc.dat %>% filter(latitude!="NA") %>% arrange(Stop) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, bcr)
 
+#write.csv(loc.dat, "output/Map.csv")
 
 ##____________________________________________________________________
-#Because in the early years the Ontario owls program ran upwards of 4 surveys/route/year, the duplicates will need to be removed. We run this script for all province since there are some other doublicate routes that have snuck into the assessment. 
+#Because in the early years the Ontario owls program ran upwards of 4 surveys/route/year, the duplicates will need to be removed. We run this script for all province since there are some other duplicate routes that have made their way into the database. 
 
-#since there is no window field we need to select the last survey date for those that have multiple surveys per route within a year
+#We select the last survey date for those that have multiple surveys per route within a year
 
 #first filter by the min and max survey doy to capture the surveys that are done consistently with current protocol
-test <- dat %>% filter(doy >= min.doy & doy <= max.doy)
+dat <- dat %>% filter(doy >= min.doy & doy <= max.doy)
   
-#group by year and route to see unique survey months/days
-test <- test %>% group_by(RouteIdentifier, survey_year)%>%
-  summarize(sample_events=n_distinct(survey_day))
-
-#merge back with main dataframe 
-dat<-left_join(dat, test, by= c("RouteIdentifier", "survey_year"))
-
-#subset out the data with sample_events>1
-subowls<-subset(dat, sample_events>1)
-
-if(nrow(subowls)>0){
-
-#want to select the min day for each Year SurveryAreaIdentifier combo with more then one sampling event. 
-minday<-subowls %>% group_by(RouteIdentifier, survey_year)%>%
-  summarize(minday=min(doy, na.rm=TRUE))
-
-#merge back with main data, eliminate the unwanted data, select needed columns
-dat<-left_join(dat, minday, by= c("RouteIdentifier", "survey_year"))
-dat$check<-dat$minday-dat$doy
-dat$check[is.na(dat$check)] <- 0
-dat<-dat%>%filter(check==0)
-dat<-dat%>% select(-sample_events, -minday, -check)
-
-}else{
-
-dat<-dat%>% select(-sample_events)
-}
+#if multiple surveys done in a year, keep the first survey. 
+dat <- dat %>% group_by(SiteCode, survey_year)%>%
+  slice_min(survey_day)
 
 
 ##______________________________________________________________
@@ -232,6 +236,11 @@ dat<-dat %>% filter(is.na(EffortMeasurement14)|EffortMeasurement14==0) #Repeats 
 stop.year<-dat %>% group_by(RouteIdentifier, survey_year) %>% summarize(nstop=n_distinct(SurveyAreaIdentifier))
 dat<-left_join(dat, stop.year, by=c("RouteIdentifier", "survey_year"))
 
+##___________________________________________________________________
+#Filter incomplete routes, which are defined here as routes that had less than 5 stops complete in a year. 
+
+dat<- dat %>% filter(nstop>=5)
+
 ##____________________________________________________________________
 #Now that the surveys are removed that were done in inappropriate environmental conditions we can make a list of unique sampling events to use for zero-filling species-specific data frames. We don't zero-fill the entire data frame for space issues. 
 
@@ -250,14 +259,17 @@ event.data<-left_join(event.data, loc.dat, by=c("RouteIdentifier"))
 ##____________________________________________________________________
 #Because we have different data collection methods, the response variable for each protocol may be ObservationCount2+ObservationCount3 = ObservationCount OR ObservationCount depending on how the data are recorded. The Analysis Parameters files will specify this for each protocol under the `obs` column. 
 
-if(obs=="ObservationCount1"){
-dat$ObservationCount2<-ifelse(is.na(dat$ObservationCount2), 0, 1)
-dat$ObservationCount3<-ifelse(is.na(dat$ObservationCount3), 0, 1)
-dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | ObservationCount3==1, 1, 0))    
-}
+#If you are just interested in the silent listening period. 
+#ObservationCount = 1st minute + 2nd minute (i.e., silent listening period).
+
+#if(obs=="ObservationCount1"){
+#dat$ObservationCount2<-ifelse(is.na(dat$ObservationCount2), 0, 1)
+#dat$ObservationCount3<-ifelse(is.na(dat$ObservationCount3), 0, 1)
+#dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | #ObservationCount3==1, 1, 0))    
+#}
 
 #now we no longer need these fields
-dat<-dat %>% select(-ObservationCount2, -ObservationDescriptor3)
+dat<-dat %>% select(-ObservationCount2, -ObservationCount3, -ObservationDescriptor2, -ObservationDescriptor3)
 
 ##Remove rare species
 #Species must be detected on at least half of all years surveyed.  
@@ -271,18 +283,19 @@ df.nyears <- dat %>%
   group_by(CommonName) %>%
   summarize(nyears = n()) %>%
   filter(nyears >= min.yrs.detect)%>%
-  as.data.frame()
+  as.data.frame() %>% 
+  filter(CommonName != "owl sp.")
 
 dat <- left_join(df.nyears, dat, by = c("CommonName")) %>%  select(-nyears)
 
-#Species must be detected with a mean of ~3 per years to be included in the analysis. 
+#Species must be detected with a mean of ~5 per years to be included in the analysis. 
 
 df.abund <- NULL #clear old
 df.abund <- dat %>%
   group_by(CommonName, survey_year) %>%
   summarize(count = sum(ObservationCount)) %>% 
   summarize(meanCount = mean(count, na.rm = TRUE)) %>% 
-  filter(meanCount >= 3)%>%
+  filter(meanCount >= 5)%>%
   as.data.frame()
 
 dat <- left_join(df.abund, dat, by = c("CommonName")) %>%
@@ -290,11 +303,20 @@ dat <- left_join(df.abund, dat, by = c("CommonName")) %>%
   as.data.frame()
 
 #print the final data to file
+#write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".csv", sep=""))
 
-write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".csv", sep=""))
+Owls<-NULL
+Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, ProtocolCode, doy,  CommonName, ObservationCount, StateProvince)
+
+write.table(Owls, file = paste(out.dir,  "OwlDataClean.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
 
 #print the event.data to file 
-write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
+#write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
+
+Events<-NULL
+Events<-event.data 
+write.table(Events, file = paste(out.dir,  "Events",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+
 
 } #end loop
 

@@ -17,7 +17,7 @@ Using similar standards as the BBS, the NOS adopted a roadside survey protocol w
 
 ## Purpose {#Intro1.2}
 
-The purpose of this book is to empower provincial resource managers, research scientists, and students to access and manipulate the National Nocturnal Owls Survey dataset housed in Birds Canada's National Data Centre: [NatureCounts](www.naturecounts.ca). The current focus of the book is on data cleaning, summary statistics, mapping and trends analysis.
+The purpose of this book is to empower provincial resource managers, research scientists, and students to access and manipulate the National Nocturnal Owls Survey dataset housed in Birds Canada's national data centre: [NatureCounts](www.naturecounts.ca). The current focus of the book is on data cleaning, summary statistics, mapping and trends analysis.
 
 ## Prerequisites {#Intro1.3}
 
@@ -27,4 +27,4 @@ We also recommend you review the [NatureCounts: An Introductory Tutorial](link%2
 
 ## Acknowledgements {#Intro1.4}
 
-Nocturnal Owl Surveys across Canada attracts over 1000 volunteers each year. [Birds Canada](https://www.birdscanada.org/) staff manage most provincial NOS programs, except for in Alberta and Manitoba. The raw data are archived in [NatureCounts](www.naturecounts.ca), which is a node of the international [Avian Knowledge Network](www.avianknowledge.net).
+Nocturnal Owl Surveys across Canada attracts over 1000 volunteers each year. [Birds Canada](https://www.birdscanada.org/) staff manage most provincial NOS programs, except for in Alberta, Manitoba and the Cape Breton Highlands of Nova Scotia. The raw data are archived in [NatureCounts](www.naturecounts.ca), which is a node of the international [Avian Knowledge Network](www.avianknowledge.net).
