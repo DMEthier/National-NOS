@@ -19,7 +19,7 @@ library(tidyverse)
 library(INLA)
 library(inlabru)
 library(spdep)
-library(rgdal)
+#library(rgdal)
 library(VGAM)
 library(reshape)
 
@@ -497,7 +497,7 @@ epsg6703km <- paste(
   "+units=km +no_defs"
 )
 
-#Need to include the "Map.csv" because this includes the UTM which is need for the anaysis. 
+#Need to include the "Map.csv" because this includes the UTM which is need for the analysis. 
 
 dat<-read.csv("output/QC_OwlDataClean.csv")
 events<-read.csv("output/QC_Events.csv")
@@ -542,15 +542,15 @@ site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
 site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
 
 # Limit raw data to these species, i.e., those that were observed at least once on a route 
-  sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
+sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
 
 ##-----------------------------------------------------------
-# Count the number of owls per route as the response varaible. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
+# Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
 sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, CollectorNumber, nstop, StateProvince, bcr, latitude, longitude, Easting, Northing) %>% summarise(count=sum(ObservationCount))
 
 ##-----------------------------------------------------------
 #Create index variables
-sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier, latitude, longitude))) %>% 
+sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier))) %>% 
   group_by(site_idx) %>% 
   mutate(n_years = n()) %>%
   filter(n_years >= 10) %>% #remove routes with <10 years of data
@@ -558,21 +558,17 @@ sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier, latitude,
   mutate(
     std_yr = survey_year - max.yr,
     obs = seq_len(nrow(.)),
-    site_idx = as.numeric(factor(paste(RouteIdentifier, longitude, latitude))),
+    site_idx = as.numeric(factor(paste(RouteIdentifier))),
     year_idx = as.numeric(factor(survey_year)),
-    site_year_idx = as.numeric(factor(paste(RouteIdentifier, longitude, latitude, survey_year)))) %>%
+    site_year_idx = as.numeric(factor(paste(RouteIdentifier, survey_year)))) %>%
     st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE) %>%
      st_transform(epsg6703km) %>%
   mutate(
     easting = st_coordinates(.)[, 1],
     northing = st_coordinates(.)[, 2]) %>% 
-#  st_as_sf(coords=c("Easting", "Northing")) %>% 
-#    mutate(
-#      Easting = st_coordinates(.)[,1], 
-#      Northing = st_coordinates(.)[,2]) %>% 
     arrange(RouteIdentifier, survey_year)
 
-  ##----------------------------------------------------------
+##----------------------------------------------------------
 # map it
 ggplot() +
   geom_sf(
@@ -590,40 +586,120 @@ site_map <- sp.data %>%
   distinct() %>%
   select(RouteIdentifier, easting, northing)
 
-  
-  ##-----------------------------------------------------------
+##-----------------------------------------------------------
 #Make a set of distinct study sites for mapping    
 #Make a two extension hulls and mesh for spatial model
 
 #sp.data<-as.matrix(sp.data)  
-
 hull <- fm_extensions(
   sp.data,
-  convex = c(200, 500),
-  concave = c(350, 500)
+  convex = c(20, 50),
+  concave = c(35, 50)
 )
 
 mesh <- fm_mesh_2d_inla(
-  boundary = hull, max.edge = c(100, 600), # km inside and outside
-  cutoff = 1, offset = c(100, 300), #set cutoff to one to place point in vertex
+  boundary = hull, max.edge = c(100, 120), # km inside and outside
+  cutoff = 0, #offset = c(100, 300), #set cutoff to one to place point in vertex
   crs = fm_crs(sp.data)
 ) # cutoff is min edge
 
 # plot it
-ggplot() +
+meshmap1<-ggplot() +
   gg(data = mesh) +
   geom_sf(data = site_map, col = "darkgreen", size = 1) +
   geom_sf(data = qc, fill = NA) +
   theme_bw() +
   labs(x = "", y = "")  
 
-# make spde
-spde <- inla.spde2.pcmatern(
-  mesh = mesh,
+#make the mesh this way so that the point fall on the vertices of the lattice
+Loc<-site_map%>% select(easting, northing) %>% 
+    st_drop_geometry() %>% as.matrix()
+
+mesh2<-fm_mesh_2d_inla(Loc, 
+#mesh2<-inla.mesh.2d(Loc, 
+  boundary = hull,
+  max.edge = c(50, 200), # km inside and outside
+  cutoff = 0,
+  crs = fm_crs(sp.data))
+
+A1<-inla.spde.make.A(mesh2, loc=Loc)
+dim(A1)
+
+# plot it 2
+meshmap2<-ggplot() +
+  gg(data = mesh2) +
+  geom_sf(data = site_map, col = "darkgreen", size = 1) +
+  geom_sf(data = qc, fill = NA) +
+  theme_bw() +
+  labs(x = "", y = "")  
+
+##-----------------------------------------------------------
+##Group Matrix for each year of data
+#group<-sp.data$survey_year-min(sp.data$survey_year)
+#ngroup=length(unique(group)) #15 years of data = 15 groups
+  
+#make predictor matrix for the mesh model
+#Loc2<-sp.data %>% select(longitude, latitude) %>% 
+#    st_drop_geometry() %>% as.matrix()
+
+#A1<-inla.spde.make.A(mesh2, loc=Loc2, group=group)
+#dim(A1)
+
+#mesh3<-inla.mesh.2d(Loc2, 
+#  boundary = hull,
+#  max.edge = c(50, 200), # km inside and outside
+#  cutoff = 0,
+#  crs = fm_crs(sp.data))
+
+# plot it 3
+#meshmap3<-ggplot() +
+#  gg(data = mesh3) +
+#  geom_sf(data = site_map, col = "darkgreen", size = 1) +
+#  geom_sf(data = qc, fill = NA) +
+#  theme_bw() +
+#  labs(x = "", y = "")  
+
+#A1<-inla.spde.make.A(mesh3, loc=Loc2, group=group)
+#dim(A1)
+
+##-----------------------------------------------------------
+
+# make spde object to define smoothness and prior distribution
+
+# make spde old code
+#spde <- inla.spde2.pcmatern(
+#  mesh = mesh,
+#  prior.range = c(500, 0.5),
+#  prior.sigma = c(1, 0.5)
+#)
+
+spde <- inla.spde2.pcmatern(  # pg 218 this formula should include an alpha, default is 2 if the model does not include times. 
+  mesh = mesh2,
   prior.range = c(500, 0.5),
   prior.sigma = c(1, 0.5)
 )
-  
+
+#Define the spatial field
+#w.index<-inla.spde.make.index(
+#  name="W", 
+#  n.spde=spde$n.spde, 
+#  #n.group=ngroup, 
+#  n.repl=1
+#)
+
+#N<-nrow(sp.data)
+#X<-data.frame(Intercept = rep(1, N)) #add covariates here
+
+#Create the INLA stack function
+#StackFit<-inla.stack(
+#                     tag="Fit", 
+#                     data = list (y = sp.data$count), 
+#                     A = list(1, A1), 
+#                     effects = list(
+#                       X = X,  
+#                       w = w.index)
+#                     )
+
 ##-----------------------------------------------------------
 #Model Formula
 
@@ -663,11 +739,15 @@ summary((exp(res$summary.random$tau$"0.5quant") - 1) * 100) # (exp(tau)-1)*100
 bbox <- fm_bbox(hull[[1]])
 grd_dims <- round(c(x = diff(bbox[[1]]), y = diff(bbox[[2]])) / 25)
 
+#bbox <- fm_bbox(mesh2$loc)
+#grd_dims <- round(c(x = diff(bbox[[1]]), y = #diff(bbox[[2]])))
+
 # make mesh projector to get model summaries from the mesh to the mapping grid
-mesh_proj <- fm_evaluator(
-  mesh,
+mesh_proj <- fm_evaluator(mesh2,
   xlim = bbox[[1]], ylim = bbox[[2]], dims = grd_dims
 )
+
+#mesh_proj<-inla.mesh.projector(mesh2, #xlim=range(Loc[,1]), ylim=range(Loc[,2]), #dims=grd_dims)
 
 #Pull data
 # pull data
@@ -689,41 +769,174 @@ taus <- data.frame(
     exp(res$summary.random$tau$"0.025quant")) * 100
 )
 
-#site specific predictorions
+# loop to get estimates on a mapping grid
+pred_grids <- lapply(
+  list(alpha = alph, tau = taus),
+  function(x) as.matrix(fm_evaluate(mesh_proj, x))
+)
 
-pa <- make_plot_site(
-  data = cbind(site_map, data.frame(value = alpha$median)),
+##-----------------------------------------------------------
+#Create plot functions
+
+##Check what is data_sk?
+
+make_plot_field <- function(data_stk, scale_label) {
+  ggplot(qc) +
+    geom_sf(fill = NA) +
+    coord_sf(datum = NA) +
+    geom_spatraster(data = data_stk) +
+    labs(x = "", y = "") +
+    scale_fill_distiller(scale_label,
+      palette = "Spectral",
+      na.value = "transparent"
+    ) +
+    theme_bw() +
+    geom_sf(fill = NA)
+}
+make_plot_site <- function(data, scale_label) {
+  ggplot(qc) +
+    geom_sf() +
+    coord_sf(datum = NA) +
+    geom_sf(data = data, size = 1, mapping = aes(colour = value)) +
+    scale_colour_distiller(scale_label, palette = "Spectral") +
+    labs(x = "", y = "") +
+    theme_bw() +
+    geom_sf(fill = NA)
+}
+
+##-----------------------------------------------------------
+# make a terra raster stack with the posterior median and range95
+out_stk <- rast()
+for (j in 1:2) {
+  mean_j <- cbind(expand.grid(x = mesh_proj$x, y = mesh_proj$y),
+    Z = c(matrix(pred_grids[[j]][, 1], grd_dims[1]))
+  )
+  mean_j <- rast(mean_j, crs = epsg6703km)
+  range95_j <- cbind(expand.grid(X = mesh_proj$x, Y = mesh_proj$y),
+    Z = c(matrix(pred_grids[[j]][, 2], grd_dims[1]))
+  )
+  range95_j <- rast(range95_j, crs = epsg6703km)
+  out_j <- c(mean_j, range95_j)
+  terra::add(out_stk) <- out_j
+}
+
+names(out_stk) <- c("alpha_median", "alpha_range95", "tau_median", "tau_range95"
+)
+
+
+canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km ) 
+qc <- filter(canada, name == "Québec")
+
+out_stk <- terra::mask(out_stk, qc, touches = FALSE)
+
+##-----------------------------------------------------------
+# medians
+# fields alpha_s, tau_s
+pa <- make_plot_field(
+  data_stk = out_stk[["alpha_median"]],
   scale_label = "posterior\nmedian\nexp(alpha_s)"
 )
 
-pt <- make_plot_site(
-  data = cbind(site_map, data.frame(value = taus$median)),
-  scale_label = "posterior\nmedian\nexp(tau_s)"
+pt <- make_plot_field(
+  data_stk = out_stk[["tau_median"]],
+  scale_label = "posterior\nmedian\n100(exp(tau_s)-1)"
 )
-
-pk <- make_plot_site(
+# sites kappa_s
+ps <- make_plot_site(
   data = cbind(site_map, data.frame(value = kappa$median)),
   scale_label = "posterior\nmedian\nexp(kappa_s)"
 )
-
-pa_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = alpha$range95)),
-  scale_label = "posterior\nrange95\nexp(alphs_s)"
+# range95
+# fields alpha_s, tau_s
+pa_range95 <- make_plot_field(
+  data_stk = out_stk[["alpha_range95"]],
+  scale_label = "posterior\nrange95\nexp(alpha_s)"
 )
 
-pt_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = taus$range95)),
-  scale_label = "posterior\nrange95\nexp(tau_s)"
+pt_range95 <- make_plot_field(
+  data_stk = out_stk[["tau_range95"]],
+  scale_label = "posterior\nrange95\n100(exp(tau_s)-1)"
 )
 
-pk_range95 <- make_plot_site(
+# sites kappa_s
+ps_range95 <- make_plot_site(
   data = cbind(site_map, data.frame(value = kappa$range95)),
   scale_label = "posterior\nrange95\nexp(kappa_s)"
 )
 
 # plot together
-multiplot(pa, pt, pk, cols = 2)
+multiplot(ps, pa, pt, cols = 2)
 
+# plot together
+multiplot(ps_range95, pa_range95, pt_range95, cols = 2)
+
+# plot together
+multiplot(ps, pa, pt, ps_range95, pa_range95, pt_range95, cols = 2)
+
+
+#___________________________________________________
+#Predict the SPDE and covariates at the vertex locations
+
+vertices<-fmesher::fm_vertices(mesh2)
+
+# predict on the vertices
+pred <- predict(
+  res,
+  vertices)
+
+alph_filter <- pred$alpha
+alph_filter<-alph_filter %>% filter(geometry %in% site_map$geometry)
+
+alph_median <- data.frame(
+  geometry=aplh_filter$geometry,
+  median = exp(alph_filter$"q0.5"))
+
+alph_range <- data.frame(
+  geometry=aplh_filter$geometry,
+  range95 = exp(alph_filter$"q0.975") -
+    exp(aplh_filter$"q0.025")
+)
+
+
+# sites alph_s
+pa <- make_plot_site(
+  data = cbind(site_map, data.frame(value = alph_median$median)),
+  scale_label = "posterior\nmedian\nexp(alph_s)"
+)
+
+# range95  alpha_s
+pa_range95 <- make_plot_site(
+  data = cbind(site_map, data.frame(value = alph_range$range95)), 
+  scale_label = "posterior\nrange95\nexp(alpha_s)"
+)
+
+tau_filter <- pred$tau
+tau_filter<-tau_filter %>% filter(geometry %in% site_map$geometry)
+
+tau_median <- data.frame(
+  geometry=tau_filter$geometry,
+  median = (exp(tau_filter$"q0.5") -1)*100)
+
+tau_range <- data.frame(
+  geometry=tau_filter$geometry,
+  range95 = (exp(tau_filter$"q0.975") -
+    exp(tau_filter$"q0.025")) *100)
+
+
+# sites tau_s
+pt <- make_plot_site(
+  data = cbind(site_map, data.frame(value = tau_median$median)),
+  scale_label = "posterior\nmedian\nexp(tau_s)"
+)
+
+# range95  tau_s
+pt_range95 <- make_plot_site(
+  data = cbind(site_map, data.frame(value = tau_range$range95)), 
+  scale_label = "posterior\nrange95\nexp(alpha_s)"
+)
+
+# plot together
+multiplot(ps, pa, pt, ps_range95, pa_range95, pt_range95, cols = 2)
 
 }#end boreal loop
 }#end species loop
@@ -971,7 +1184,7 @@ names(out_stk) <- c(
   "alpha_median", "alpha_range95", "tau_median", "tau_range95"
 )
 
-out_stk <- terra::mask(out_stk, basemap, touches = FALSE)
+out_stk <- terra::mask(out_stk, qc, touches = FALSE)
 
 
 #make plots
