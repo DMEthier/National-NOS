@@ -127,10 +127,10 @@ Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimn
    names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "bcr")
 
 #only need to create the table once per analysis   
-write.table(Events, file = paste(out.dir,  "QC_Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+write.table(Events, file = paste(out.dir,  "Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
-Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 10, byrow = FALSE, dimnames = NULL))
-   names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "ProtocolCode", "doy",  "CommonName", "ObservationCount", "StateProvince")
+Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 11, byrow = FALSE, dimnames = NULL))
+   names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "ProtocolCode", "doy",  "CommonName", "species_id", "ObservationCount", "StateProvince")
 
 #only need to create the table once per analysis   
 write.table(Owls, file = paste(out.dir,  "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
@@ -149,7 +149,7 @@ k<-13 # manually specify the row in the Analysis Parameters file to be run. Curr
 
 max.yr <- 2023 #set to the maximum year of current data
 
-#Note: data from 2020 will be incomplete for most provinces due to COVID19. At the time of writing, not all 2021 data were proofed in NatureCounts and may be missing
+#Note: data from 2020 will be incomplete for most provinces due to COVID19. 
 
 #Pull the protocol-specific data you need for filtering from the Analysis Parameters file
 
@@ -259,13 +259,11 @@ event.data<-left_join(event.data, loc.dat, by=c("RouteIdentifier"))
 ##____________________________________________________________________
 #Because we have different data collection methods, the response variable for each protocol may be ObservationCount2+ObservationCount3 = ObservationCount OR ObservationCount depending on how the data are recorded. The Analysis Parameters files will specify this for each protocol under the `obs` column. 
 
-#If you are just interested in the silent listening period. 
-#ObservationCount = 1st minute + 2nd minute (i.e., silent listening period).
-
+#Use this code is you would like to use just the date collected during the first 2 min
 #if(obs=="ObservationCount1"){
 #dat$ObservationCount2<-ifelse(is.na(dat$ObservationCount2), 0, 1)
 #dat$ObservationCount3<-ifelse(is.na(dat$ObservationCount3), 0, 1)
-#dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | #ObservationCount3==1, 1, 0))    
+#dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | ObservationCount3==1, 1, 0))    
 #}
 
 #now we no longer need these fields
@@ -306,7 +304,7 @@ dat <- left_join(df.abund, dat, by = c("CommonName")) %>%
 #write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".csv", sep=""))
 
 Owls<-NULL
-Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, ProtocolCode, doy,  CommonName, ObservationCount, StateProvince)
+Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, ProtocolCode, doy,  CommonName, species_id, ObservationCount, StateProvince)
 
 write.table(Owls, file = paste(out.dir,  "OwlDataClean.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
 
@@ -316,7 +314,6 @@ write.table(Owls, file = paste(out.dir,  "OwlDataClean.csv", sep = ""), row.name
 Events<-NULL
 Events<-event.data 
 write.table(Events, file = paste(out.dir,  "Events",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-
 
 } #end loop
 
