@@ -108,6 +108,7 @@ write.table(trends.csv, file = paste(out.dir,
 #Set up data for analysis
 
 dat<-dat %>% select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "CollectorNumber", "ObservationCount")
+#dat<-dat %>% filter(CommonName!="Boreal Owl")
 
 sp.list<-unique(dat$CommonName)
 max.yr<-max(dat$survey_year)
@@ -160,7 +161,8 @@ write.table(grid.sum, paste(out.dir, sp.list[m], "_SpeciesGridCountSummary.csv",
 # Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
 
   site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
-  site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
+  
+site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
   site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
 
 # Limit raw data to these species, i.e., those that were observed at least once on a route 
@@ -169,6 +171,8 @@ write.table(grid.sum, paste(out.dir, sp.list[m], "_SpeciesGridCountSummary.csv",
 ##-----------------------------------------------------------
 # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
 sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, id, nstop, StateProvince, bcr, latitude, longitude) %>% dplyr::summarise(count=sum(ObservationCount))
+  
+sp.data$species_id<-sp.id  
   
 ##-----------------------------------------------------------
 #standardize year to 2023, prepare index variables 
@@ -442,7 +446,7 @@ tau_prov$model_fit<-""
 
 tau_prov$per<-max.yr-min.yr
 tau_prov$per_trend<-tau_prov$med_tau/100
-tau_prov$percent_change<-((1+per_trend)^per-1)*100
+tau_prov$percent_change<-((1+tau_prov$per_trend)^tau_prov$per-1)*100
 
 tau_prov$percent_change_low<-""
 tau_prov$percent_change_high<-""
@@ -468,7 +472,7 @@ tau_prov$prob_LI<-""
 trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
 
 # Write data to table
-write.table(trends.csv, file = paste(out.dir, 
+write.table(trend.csv, file = paste(out.dir, 
                                      "NOS_TrendsSlope", ".csv", sep = ""),
                   row.names = FALSE, 
                   append = TRUE, 
@@ -571,6 +575,63 @@ post_sum$tau_sig <- ifelse((post_sum$tau_ll < 1 & post_sum$tau_ul > 1),
 id_grid<-sp.data %>% ungroup() %>% dplyr::select(alpha_i, id) %>% distinct()
 post_sum<-merge(post_sum, cell_id, by="alpha_i")
 post_sum$taxa_code<-sp
+
+
+#output for SoBC. This is clunky, but clear. 
+tau_cell<-post_sum
+tau_cell$results_code<-"OWLS"
+tau_cell$version<-max.yr
+tau_cell$area_code<-tau_cell$id
+tau_cell$species_code<-""
+tau_cell$species_id<-sp.id
+tau_cell$season<-"Breeding"
+tau_cell$period<-"all years"
+tau_cell$years<-paste(min.yr, "-", max.yr, sep="")
+tau_cell$year_start<-min.yr
+tau_cell$year_end<-max.yr
+tau_cell$trnd<-tau_cell$tau
+tau_cell$index_type<-""
+tau_cell$upper_ci<-tau_cell$tau_ul
+tau_cell$lower_ci<-tau_cell$tau_ll
+tau_cell$stderr<-""
+tau_cell$model_type<-"iCAR Slope"
+tau_cell$model_fit<-""
+
+tau_cell$per<-max.yr-min.yr
+tau_cell$per_trend<-tau_cell$tau/100
+tau_cell$percent_change<-((1+tau_cell$per_trend)^tau_cell$per-1)*100
+
+tau_cell$percent_change_low<-""
+tau_cell$percent_change_high<-""
+tau_cell$prob_decrease_0<-""
+tau_cell$prob_decrease_25<-""
+tau_cell$prob_decrease_30<-""
+tau_cell$prob_decrease_50<-""
+tau_cell$prob_increase_0<-""
+tau_cell$prob_increase_33<-""
+tau_cell$prob_increase_100<-""
+tau_cell$confidence<-""
+tau_cell$precision_num<-""
+tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
+tau_cell$coverage_num<-""
+tau_cell$coverage_cat<-""
+tau_cell$sample_size<-""
+tau_cell$prob_LD<-""
+tau_cell$prob_MD<-""
+tau_cell$prob_LC<-""
+tau_cell$prob_MI<-""
+tau_cell$prob_LI<-""
+
+trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+
+# Write data to table
+write.table(trend.csv, file = paste(out.dir, 
+                                     "NOS_TrendsSlope", ".csv", sep = ""),
+                  row.names = FALSE, 
+                  append = TRUE, 
+                  quote = FALSE, 
+                  sep = ",", 
+                  col.names = FALSE)
 
 
 write.table(post_sum, paste(out.dir, "PosteriorSummary.csv"), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
