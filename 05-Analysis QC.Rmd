@@ -38,7 +38,9 @@ Load data and set directories
 
 dat<-read.csv("output/QC_OwlDataClean.csv")
 events<-read.csv("output/QC_Events.csv")
-grid<-read.csv("data/QC_MapSqaureID.csv") #this files was map in ArcGIS using the 'loc' for routes. 
+#grid<-read.csv("data/QC_MapSqaureID.csv") #this files was map in ArcGIS using the 'loc' for routes. 
+
+map<-read.csv("output/QC_Map.csv")
 
 out.dir<-"output/"
 
@@ -47,9 +49,11 @@ out.dir<-"output/"
 Make Spatial Grid for iCAR Analysis
 ```{r spatial grid}
 
-#grid data are only those cells containing data. This layers is created in ArcGIS. 
-Grid <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_grid")
+#all grid for North American
+#poly<- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", #layer="nos_na_grid")
 
+#grid data are only those cells containing data. This layers is created in ArcGIS. 
+Grid <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_New")
 nb1 <- spdep::poly2nb(Grid, row.names=Grid$data); nb1
 
 #Neighbour list object:
@@ -63,6 +67,15 @@ nb2INLA("nb1.graph", nb1)
 nb1.adj <- paste(getwd(),"/nb1.graph", sep="")
 g1 <- inla.read.graph("nb1.graph")
 
+#This needed 'Projected' in Arc GIS from Albers to Nad83
+Grid_proj<-st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_proj")
+
+#Routes .shp made in ArcGIS
+Route <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Route_new")
+
+#spatial join
+grid<-st_join(Route, left=TRUE, Grid_proj)
+grid<-grid %>% select(RouteIdent, latitude, longitude, id, bcr_number, bcr_name)
 
 ```
 
@@ -244,11 +257,13 @@ f1 <- count ~ -1 + nstop + #number of stops included as a covariate
 #-----------------------------------------------------------
 ##Run top model, which has ZIP for all owls species in QC
 
-family<-"zeroinflatedpoisson1"
-index<-"index.zip"
+#family<-"zeroinflatedpoisson1"
+#index<-"index.zip"
+
+index<-"index.nb"
   
   #rerun the top model and save output
-  out1<-try(inla(f1, family = family, data = sp.data, #E = nstop, 
+  out1<-try(inla(f1, family = "nbinomial", data = sp.data, #E = nstop, 
                  control.predictor = list(compute = TRUE), control.compute = list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
   
 
