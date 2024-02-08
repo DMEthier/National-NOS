@@ -655,6 +655,7 @@ write.table(post_sum, paste(out.dir, "PosteriorSummary.csv"), row.names = FALSE,
 
 ```
 
+
 #Route level analysis using sites that have 10+years of data. 
 
 ```{r route analysis}
@@ -668,23 +669,32 @@ library(tidyr)
 library(scales)
 library(dplyr)
 library(tidyverse)
+library(tidyterra)
+library(prettymapr)
 
 #make need to install the test version to make this work. 
-library("devtools")
-install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/testing"), dep=TRUE)
+library(devtools)
+#install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/testing"), dep=TRUE)
 library(INLA)
 library(inlabru)
 library(fmesher)
 library(sp)
 library(reshape)
 library(MatrixModels)
+library(Matrix)
 library(ggspatial)
 library(viridis)
+library(naturecounts)
+library(iemisc)
+library(oce)
 
+library(mapview)
+library(ggmap) 
+register_stadiamaps("1cdeb586-3f5a-4ef9-813b-02375efa9f21") 
 
 # make a base map
-canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(3347) #st_transform(4326)
-qc <- filter(canada, name == "Québec")
+#canada <- ne_states(country = "canada", returnclass = "sf") %>% st_transform(3347) #st_transform(4326)
+#qc <- filter(canada, name == "Québec")
 
 epsg6703km <- paste(
   "+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5",
@@ -698,13 +708,24 @@ dat<-read.csv("output/QC_OwlDataClean.csv")
 events<-read.csv("output/QC_Events.csv")
 map<-read.csv("output/QC_Map.csv")
 
-map<-map %>% select(RouteIdentifier, Northing, Easting)
-events<-left_join(events, map, by="RouteIdentifier")
+#map<-map %>% select(RouteIdentifier, Northing, Easting)
+events<-left_join(events, map, by=c("RouteIdentifier", "latitude", "longitude"))
+
+#Add UTM coords
+UTM<-lonlat2utm( 
+  events$latitude,
+  events$longitude
+)
+
+events$Easting<-UTM$easting
+events$Northing<-UTM$northing
+
+events<-events %>% select(SiteCode, RouteIdentifier, survey_year, latitude, longitude, Easting, Northing, bcr)
 
 ##---------------------------------------------------------
 #Set up data for analysis
 
-dat<-dat %>% select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "CollectorNumber", "ObservationCount")
+dat<-dat %>% dplyr::select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "ObservationCount", "StateProvince")
 
 sp.list<-unique(dat$CommonName)
 max.yr<-max(dat$survey_year)
@@ -712,7 +733,7 @@ min.yr<-min(dat$survey_year)
 
 #load species names list
 sp.names<-meta_species_taxonomy()
-sp.names<-sp.names %>% select(species_id, english_name, scientific_name)
+sp.names<-sp.names %>% dplyr::select(species_id, english_name, scientific_name)
 
 ##----------------------------------------------------------
 #Create species analysis loop
@@ -723,7 +744,7 @@ for(m in 1:length(sp.list)) {
 if(sp.list[m] != "Boreal Owl") { #do not run if Boreal Owl. To few routes with 10 years of data. 
   
   sp.data <-NULL 
-  sp.data <- filter(dat, CommonName == sp.list[m]) %>%
+  sp.data <- dplyr::filter(dat, CommonName == sp.list[m]) %>%
       droplevels()
   sp<-sp.list[m] 
   sp.id<-unique(sp.data$species_id)
@@ -733,7 +754,11 @@ print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = ""))
 
 ##-----------------------------------------------------------
 #zero fill by merging with the events dataframe. 
-sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
+sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
+
+sp.data$CommonName<-sp
+sp.data$species_id<-sp.id
+sp.data$StateProvince<-"QC"
 
 ##-----------------------------------------------------------
 #Remove routes that do not have at least one observation of the species
@@ -747,13 +772,13 @@ sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
 
 ##-----------------------------------------------------------
 # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
-sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, CollectorNumber, nstop, StateProvince, bcr, latitude, longitude, Easting, Northing) %>% summarise(count=sum(ObservationCount))
+sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, bcr, latitude, longitude, Easting, Northing) %>% summarise(count=sum(ObservationCount))
 
 ##-----------------------------------------------------------
 #Create index variables
 sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier))) %>% 
   group_by(site_idx) %>% 
-  mutate(n_years = n()) %>%
+  mutate(n_years = dplyr::n()) %>%
   filter(n_years >= 10) %>% #remove routes with <10 years of data
   ungroup() %>%
   mutate(
@@ -1053,6 +1078,14 @@ tau_median <- data.frame(
   geometry=tau_filter$geometry,
   median = (exp(tau_filter$"q0.5") -1)*100)
 
+tau_lci <- data.frame(
+  geometry=tau_filter$geometry,
+  tau_ll = (exp(tau_filter$"q0.025") -1)*100)
+
+tau_uci <- data.frame(
+  geometry=tau_filter$geometry,
+  tau_ul = (exp(tau_filter$"q0.975") -1)*100)
+
 tau_range <- data.frame(
   geometry=tau_filter$geometry,
   range95 = (exp(tau_filter$"q0.975") -
@@ -1088,6 +1121,79 @@ multiplot(ps, pa2, pt2, ps_range95, pa2_range95, pt2_range95, cols = 2)
 multiplot(pa, pt, pa2, pt2, cols=2)
 
 multiplot(pa2, pt2)
+
+##-----------------------------------------------------------
+#Print route level trends to file
+#output for SoBC. This is clunky, but clear.
+
+tau_route<-data.frame(
+  tau=tau_median$median, 
+  tau_ll=tau_lci$tau_ll,
+  tau_uci=tau_uci$tau_ul,
+  tau_wi=tau_range$range95,
+  sd=tau_filter$sd,
+  geometry=tau_filter$geometry)
+
+coord<-st_coordinates(tau_filter$geometry)
+tau_route<-cbind(tau_route, coord)
+tau_route<-tau_route %>% dplyr::rename(easting = X, northing = Y)
+
+##HERE
+tau_route<-merge(tau_route, site_map, c("easting", "northing"))
+
+tau_route$results_code<-"OWLS"
+tau_route$version<-max.yr
+tau_route$area_code<-tau_route$RouteIdentifier
+tau_route$species_code<-""
+tau_route$species_id<-sp.id
+tau_route$season<-"Breeding"
+tau_route$period<-"all years"
+tau_route$years<-paste(min.yr, "-", max.yr, sep="")
+tau_route$year_start<-min.yr
+tau_route$year_end<-max.yr
+tau_route$trnd<-tau_route$tau
+tau_route$index_type<-""
+tau_route$stderr<-""
+
+##HERE
+tau_route$model_type<-""
+tau_route$model_fit<-""
+
+tau_route$per<-max.yr-min.yr
+tau_route$per_trend<-tau_route$tau/100
+tau_route$percent_change<-((1+tau_route$per_trend)^tau_route$per-1)*100
+
+tau_route$percent_change_low<-""
+tau_route$percent_change_high<-""
+tau_route$prob_decrease_0<-""
+tau_route$prob_decrease_25<-""
+tau_route$prob_decrease_30<-""
+tau_route$prob_decrease_50<-""
+tau_route$prob_increase_0<-""
+tau_route$prob_increase_33<-""
+tau_route$prob_increase_100<-""
+tau_route$confidence<-""
+tau_route$precision_num<-""
+tau_route$precision_cat<-ifelse(tau_route$tau_iw<3.5, "High", ifelse(tau_route$tau_iw>=3.5 & tau_route$tau_iw<=6.7, "Medium", "Low"))
+tau_route$coverage_num<-""
+tau_route$coverage_cat<-""
+tau_route$sample_size<-""
+tau_route$prob_LD<-""
+tau_route$prob_MD<-""
+tau_route$prob_LC<-""
+tau_route$prob_MI<-""
+tau_route$prob_LI<-""
+
+trend.csv<-tau_route %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+
+# Write data to table
+write.table(trend.csv, file = paste(out.dir, 
+                                     "NOS_TrendsSlope", ".csv", sep = ""),
+                  row.names = FALSE, 
+                  append = TRUE, 
+                  quote = FALSE, 
+                  sep = ",", 
+                  col.names = FALSE)
 
 ##-----------------------------------------------------------
 #time series plots per route

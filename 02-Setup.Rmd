@@ -41,8 +41,9 @@ it from GitHub with the remotes package:
 
 ```{r install, eval = FALSE}
 
-install.packages("remotes")
-remotes::install_github("BirdsCanada/naturecounts")
+install.packages("naturecounts", 
+                 repos = c(birdscanada = 'https://birdscanada.r-universe.dev',
+                           CRAN = 'https://cloud.r-project.org'))
 
 ```
 
