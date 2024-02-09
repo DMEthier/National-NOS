@@ -1128,8 +1128,8 @@ multiplot(pa2, pt2)
 
 tau_route<-data.frame(
   tau=tau_median$median, 
-  tau_ll=tau_lci$tau_ll,
-  tau_uci=tau_uci$tau_ul,
+  lower_ci=tau_lci$tau_ll,
+  upper_ci=tau_uci$tau_ul,
   tau_wi=tau_range$range95,
   sd=tau_filter$sd,
   geometry=tau_filter$geometry)
@@ -1154,9 +1154,7 @@ tau_route$year_end<-max.yr
 tau_route$trnd<-tau_route$tau
 tau_route$index_type<-""
 tau_route$stderr<-""
-
-##HERE
-tau_route$model_type<-""
+tau_route$model_type<-"SPDE"
 tau_route$model_fit<-""
 
 tau_route$per<-max.yr-min.yr
@@ -1174,7 +1172,7 @@ tau_route$prob_increase_33<-""
 tau_route$prob_increase_100<-""
 tau_route$confidence<-""
 tau_route$precision_num<-""
-tau_route$precision_cat<-ifelse(tau_route$tau_iw<3.5, "High", ifelse(tau_route$tau_iw>=3.5 & tau_route$tau_iw<=6.7, "Medium", "Low"))
+tau_route$precision_cat<-ifelse(tau_route$tau_wi<3.5, "High", ifelse(tau_route$tau_wi>=3.5 & tau_route$tau_wi<=6.7, "Medium", "Low"))
 tau_route$coverage_num<-""
 tau_route$coverage_cat<-""
 tau_route$sample_size<-""
