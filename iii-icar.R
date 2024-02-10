@@ -16,28 +16,14 @@ st_crs(xy)<-"+proj=longlat +datum=NAD83"
 
 newCRS<-st_crs(poly)
 xy<-st_transform(xy, newCRS)
-test<-st_intersects(xy, poly)
+ids<-st_intersects(xy, poly)
+ids<-unlist(id, use.names=FALSE)
 
-###############
-#Add UTM coords
-UTM<-lonlat2utm( 
-  loc.dat$latitude,
-  loc.dat$longitude
-)
+#add cell id to point data
+loc.dat$cell_id<-ids
 
-loc.dat$Easting<-UTM$easting
-loc.dat$Northing<-UTM$northing
-
-coordinates(loc.dat)<-data.frame(easting=loc.dat$Easting, northing=loc.dat$Northing, proj4string = CRS("+proj=longlat +datum=NAD83"))
-loc.sp <- SpatialPointsDataFrame(c(loc.dat[,c('longitude','latitude')]), data = loc.dat, proj4string = CRS("+proj=longlat +datum=NAD83"))
-
-#SP points
-xy <- data.frame(long=loc.dat$longitude, lat=loc.dat$latitude)
-coordinates(xy) <- ~long+lat
-proj4string(xy) <- CRS("+proj=longlat +datum=NAD83")
-################
-
-
+#select the polygons that intersect the points
+Grid <- poly %>% filter(id %in% ids)
 
 #grid data are only those cells containing data. This layers is created in ArcGIS. 
 #Grid <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_New")
