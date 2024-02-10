@@ -11,11 +11,14 @@ names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber"
 #only need to create the table once per analysis   
 write.table(Owls, file = paste(out.dir, collection, "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
+Loc<-as.data.frame(matrix(data=NA, nrow=1, ncol=4, byrow=FALSE, dimnames=NULL))
+names(Loc)<-c("RouteIdentifier", "latitude", "longitude", "bcr")
+write.table(Loc, file=paste(out.dir, "Map", collection, ".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 #Posterior Summary
 post_sum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 12, byrow = FALSE, dimnames = NULL))
 names(post_sum) <- c("alpha_i", "alph", "alph_ll", "alph_ul", "alph_iw", "tau", "tau_ll", "tau_ul", "tau_iw", "tau_sig", "id", "taxa_code")
-write.table(post_sum, file = paste(out.dir, "PosteriorSummary.csv"), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+write.table(post_sum, file = paste(out.dir, collection, "PosteriorSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 #Output for SoBC import
 indices.csv <- as.data.frame(matrix(data = NA, nrow = 1, ncol = 16, byrow = FALSE,

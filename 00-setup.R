@@ -39,6 +39,7 @@ library(iemisc)
 library(oce)
 library(mapview)
 library(ggmap) 
+library(mapproj)
 register_stadiamaps("1cdeb586-3f5a-4ef9-813b-02375efa9f21") 
 
 # Create folders as necessary

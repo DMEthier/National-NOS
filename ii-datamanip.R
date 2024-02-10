@@ -121,7 +121,7 @@ for(k in 1:nrow(protcol)) {
   
   loc.dat<-loc.dat %>% filter(latitude!="NA") %>% arrange(Stop) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, bcr)
   
-  write.csv(loc.dat, paste("output/Map" , collection, protocol_id,  ".csv", sep=""))
+  write.table(loc.dat, file = paste(out.dir, "Map", collection, ".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
   ##____________________________________________________________________
   #Because in the early years the Ontario owls program ran upwards of 4 surveys/route/year, the duplicates will need to be removed. We run this script for all province since there are some other duplicate routes that have made their way into the database. 
