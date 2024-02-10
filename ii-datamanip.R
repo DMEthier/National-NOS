@@ -1,8 +1,6 @@
 #Manipuate data 
 #Currently does this one province at a time
 
-source("00-setup.R")
-
 #Import data using the naturecounts R package. 
 
 #first look in file. If it does not exist, download from database.

@@ -24,20 +24,33 @@ Also assign max year of the analysis.
 max.yr <- 2023 #needs changes with each analysis
 ID<- "dethier" #change this to your user ID. You will be prompted for a password. 
 
+source("00-setup.R")
+
 ```
 
+## Choose a collection to be downloaded. 
 
-#Output Tables
+```{r downloaddata, echo = TRUE, message = FALSE}
+
+#list the collections
+list.coll<-unique(anal.param$collection)
+
+#select your collection manually
+collection <- "ONOWLS"
+
+```
+
+## Output Tables
 
 Create the output tables. This only needs to be done once per analysis
 
 ```{r data manip}
 
-source("i-outputs.R")
+source("i-output.R")
 
 ```
 
-#Data Download/ Select Collection
+#Data Download
 
 The NOS data are downloaded using the `naturecounts` R package. Detailed instruction on how to use the `naturecounts` R pacakge can be found in [NatureCounts: An Introductory Tutorial](link%20to%20be%20provided) or on the [github](https://birdstudiescanada.github.io/naturecounts/index.html) repository. These instructions are not repeated here.
 
@@ -45,15 +58,6 @@ To access the NOS collections you must [sign up](https://www.birdscanada.org/bir
 
 There are many build in options which enable you to select temporal and/or spatial filters prior to download. If you want targeted data, you should add filters to the code chunk below. Because we will need additional auxiliary data from the [Bird Monitoring Data Exchange] (<https://www.birdscanada.org/birdmon/default/nc_bmde.jsp>) (BMDE) table in NatureCounts, we will want to change the `field_set` to "extend" and the `username` to your own account.
 
-Choose a collection to be downloaded. 
-```{r downloaddata, echo = TRUE, message = FALSE}
-
-list.coll<-unique(anal.param$collection)
-
-#select you collection manually
-collection <- "ONOWLS"
-
-```
 
 ## Data manipulations 
 
@@ -90,11 +94,10 @@ Column definitions
 -   obs: the observation count type that should be used for the national
     analysis.
 
-#At the moment, the data is manipualted provinically.   
-  
+
 ```{r data manip}
 
-source("ii_datamanip.R")
+source("ii-datamanip.R")
 
 ```
 
@@ -102,7 +105,7 @@ source("ii_datamanip.R")
 
 ```{r analysis}
 
-source("iii_analysis.R")
+source("iii-icaranaly.R")
 
 ```
 
@@ -110,7 +113,7 @@ source("iii_analysis.R")
 
 ```{r analysis}
 
-source("iii_analysis.R")
+source("iii-spdeanaly.R")
 
 ```
 
