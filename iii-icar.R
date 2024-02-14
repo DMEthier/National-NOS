@@ -1,9 +1,13 @@
 #iCAR analysis
 
 dat<-read.csv(paste(out.dir, collection, "OwlDataClean.csv", sep=""))
+dat<-dat %>% na.omit()
+
 events<-read.csv(paste(out.dir, collection, "Events.csv", sep=""))
+events<-events %>% na.omit() %>% distinct()
+
 loc.dat<-read.csv(paste(out.dir, "Map", collection, ".csv", sep=""))
-loc.dat<-loc.dat %>% na.omit()
+loc.dat<-loc.dat %>% na.omit() %>% distinct()
 
 #Make Spatial Grid for iCAR Analysis
 
@@ -17,7 +21,7 @@ st_crs(xy)<-"+proj=longlat +datum=NAD83"
 newCRS<-st_crs(poly)
 xy<-st_transform(xy, newCRS)
 ids<-st_intersects(xy, poly)
-ids<-unlist(id, use.names=FALSE)
+ids<-unlist(ids, use.names=FALSE)
 
 #add cell id to point data
 loc.dat$cell_id<-ids
@@ -26,7 +30,6 @@ loc.dat$cell_id<-ids
 Grid <- poly %>% filter(id %in% ids)
 
 #grid data are only those cells containing data. This layers is created in ArcGIS. 
-#Grid <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_New")
 nb1 <- spdep::poly2nb(Grid, row.names=Grid$data); nb1
 is.symmetric.nb(nb1, verbose = FALSE, force = TRUE)
 nb2INLA("nb1.graph", nb1)
@@ -71,21 +74,21 @@ for(m in 1:length(sp.list)) {
   
   ##-----------------------------------------------------------
   #Include back in grid id
-  grid<-grid %>% select(RouteIdent, id) %>% distinct()
-  sp.data<- left_join(sp.data, grid, by=c("RouteIdentifier" = "RouteIdent"), multiple="all")
+  grid<-grid %>% select(RouteIdentifier, cell_id) %>% distinct()
+  sp.data<- left_join(sp.data, grid, by="RouteIdentifier", multiple="all")
   
   ##----------------------------------------------------------
   #Observations per route summary
   route.sum<-sp.data %>% group_by(survey_year, RouteIdentifier) %>% summarise(count = sum(ObservationCount))
   route.sum<-cast(route.sum, RouteIdentifier~survey_year, value="count")
   
-  write.table(route.sum, paste(out.dir, sp.list[m], "_SpeciesRouteCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
+  write.table(route.sum, paste(out.dir, sp.list[m], "_", collection, "_SpeciesRouteCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
   
   #Observations per grid summary
-  grid.sum<-sp.data %>% group_by(survey_year, id) %>% summarise(count = sum(ObservationCount))
-  grid.sum<-cast(grid.sum, id~survey_year, value="count")  
+  grid.sum<-sp.data %>% group_by(survey_year, cell_id) %>% summarise(count = sum(ObservationCount))
+  grid.sum<-cast(grid.sum, cell_id~survey_year, value="count")  
   
-  write.table(grid.sum, paste(out.dir, sp.list[m], "_SpeciesGridCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
+  write.table(grid.sum, paste(out.dir, sp.list[m], "_", collection, "_SpeciesGridCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
   
   ##-----------------------------------------------------------
   # Limit to species observed at least once per route 
@@ -100,17 +103,30 @@ for(m in 1:length(sp.list)) {
   sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
   
   ##-----------------------------------------------------------
-  # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
-  sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, id, nstop, StateProvince, bcr, latitude, longitude) %>% dplyr::summarise(count=sum(ObservationCount))
+  # Limit to years when a species was observed at least once  
+  # Summarize years to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
   
+  yr.summ <- melt(sp.data, id.var = "survey_year",	measure.var = "ObservationCount")
+  
+  yr.summ <- cast(yr.summ, survey_year ~ variable,	fun.aggregate="sum")
+  yr.sp.list <- unique(subset(yr.summ, select = c("survey_year"), ObservationCount >= 1))
+  
+  # Limit raw data to these species, i.e., those that were observed at least once on a route 
+  sp.data <- merge(sp.data, yr.sp.list, by = c("survey_year"))
+  
+  ##-----------------------------------------------------------
+  # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
+  sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, cell_id, nstop, StateProvince, bcr, latitude, longitude) %>% dplyr::summarise(count=sum(ObservationCount))
   sp.data$species_id<-sp.id  
+  max.yr<-max(sp.data$survey_year)
+  min.yr<-min(sp.data$survey_year)
   
   ##-----------------------------------------------------------
   #standardize year to 2023, prepare index variables 
   #where i = grid cell, k = route, t = year
   sp.data <- sp.data %>% mutate(std_yr = survey_year - max.yr)
   sp.data$kappa_k <- as.integer(factor(sp.data$RouteIdentifier)) #index for the random site effect
-  sp.data$tau_i <- sp.data$alpha_i <- as.integer(factor(sp.data$id)) #index for each id intercept and slope
+  sp.data$tau_i <- sp.data$alpha_i <- as.integer(factor(sp.data$cell_id)) #index for each id intercept and slope
   sp.data<-as.data.frame(sp.data)
   
   #Specify model with year-id effects so that we can predict the annual index value for each id
@@ -119,7 +135,7 @@ for(m in 1:length(sp.list)) {
   
   #set up grid key
   grid_key<-NULL
-  grid_key <- unique(sp.data[, c("id", "alpha_i")])
+  grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
   grid_key$StateProvince<-"All"
   row.names(grid_key) <- NULL
   
@@ -173,13 +189,10 @@ for(m in 1:length(sp.list)) {
   #  index<-t.model[,2]
   
   #-----------------------------------------------------------
-  ##Run top model, which has ZIP for all owls species in QC
-  
-  #family<-"zeroinflatedpoisson1"
-  #index<-"index.zip"
-  
+  ##Run nbinomal model. There was an issue with the ZIP model crashing
+  #
   index<-"index.nb"
-  
+
   #rerun the top model and save output
   out1<-try(inla(f1, family = "nbinomial", data = sp.data, #E = nstop, 
                  control.predictor = list(compute = TRUE), control.compute = list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
@@ -193,7 +206,7 @@ for(m in 1:length(sp.list)) {
   random.out$Species <- sp.list[m]
   names(random.out)[1:5] <- c("mean", "SD", "0.025quant", "0.975quant", "Speices")
   
-  write.table(random.out, paste(out.dir, "Random_Summary.csv"), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
+  write.table(random.out, paste(out.dir, collection, "_", "Random_Summary.csv", sep=""), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
   
   ##Remove cells with no routes
   cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
@@ -227,8 +240,8 @@ for(m in 1:length(sp.list)) {
     cell1 <- cells_with_counts[k]
     
     #need to back assign the factor cell1 to its original grid_id
-    cell_id<-sp.data %>% ungroup() %>% dplyr::select(id, alpha_i) %>% distinct()
-    grid1<- as.character(cell_id[k,"id"])
+    cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
+    grid1<- as.character(cell_id[k,"cell_id"])
     
     #median 
     d0 <- out1$summary.random$alpha_i$`0.5quant`[cell1]
@@ -248,7 +261,7 @@ for(m in 1:length(sp.list)) {
     d2<-merge(d2, grid_key, by.x="cell", by.y="alpha_i")
     d2$taxa_code<-sp
     
-    d3<-d2 %>% select(id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
+    d3<-d2 %>% select(cell_id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
     
     #lci     
     l0 <- out1$summary.random$alpha_i$`0.025quant`[cell1]
@@ -267,7 +280,7 @@ for(m in 1:length(sp.list)) {
     l2$cell<-cell1
     l2<-merge(l2, grid_key, by.x="cell", by.y="alpha_i")
     
-    l3<-l2 %>% select(id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
+    l3<-l2 %>% select(cell_id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
     
     #uci  
     u0 <- out1$summary.random$alpha_i$`0.975quant`[cell1]
@@ -287,14 +300,14 @@ for(m in 1:length(sp.list)) {
     u2<-merge(u2, grid_key, by.x="cell", by.y="alpha_i")
     
     
-    u3<-u2 %>% select(id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
+    u3<-u2 %>% select(cell_id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
     
-    d3<-merge(d3, l3, by=c("id", "year"))
-    d3<-merge(d3, u3, by=c("id", "year"))
+    d3<-merge(d3, l3, by=c("cell_id", "year"))
+    d3<-merge(d3, u3, by=c("cell_id", "year"))
     
     d3$results_code<-"OWLS"
     d3$version<-max.yr
-    d3$area_code<-d3$id
+    d3$area_code<-d3$cell_id
     d3$year<-d3$year
     d3$season<-"Breeding"
     d3$period<-"all years"
@@ -318,7 +331,7 @@ for(m in 1:length(sp.list)) {
     
     d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
     
-    write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    write.table(d3, paste(out.dir, collection, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
     
   } #end cell specific loop
   
@@ -355,13 +368,13 @@ for(m in 1:length(sp.list)) {
     group_by(StateProvince) %>%
     summarise(med_tau=median(val), lcl_tau=quantile(val, probs=0.025),
               ucl_tau=quantile(val, probs=0.975), iw_tau=ucl_tau-lcl_tau,
-              n=n()/posterior_ss); head(tau_prov)
+              n=dplyr::n()/posterior_ss); head(tau_prov)
   tau_prov$taxa_code <- sp.list[m]
   
   #output for SoBC. This is clunky, but clear. 
   tau_prov$results_code<-"OWLS"
   tau_prov$version<-max.yr
-  tau_prov$area_code<-"QC"
+  tau_prov$area_code<-unique(events$StateProvince)
   tau_prov$species_code<-""
   tau_prov$species_id<-sp.id
   tau_prov$season<-"Breeding"
@@ -405,7 +418,7 @@ for(m in 1:length(sp.list)) {
   trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
   # Write data to table
-  write.table(trend.csv, file = paste(out.dir, 
+  write.table(trend.csv, file = paste(out.dir, collection, 
                                       "NOS_TrendsSlope", ".csv", sep = ""),
               row.names = FALSE, 
               append = TRUE, 
@@ -418,7 +431,7 @@ for(m in 1:length(sp.list)) {
   tmp1 <- select(sp.data, species_id, survey_year, count)
   
   #for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
-  nyears<-max.yr-min.yr+1
+  nyears<-nrow(yr.sp.list)
   pred.yr<-matrix(nrow=posterior_ss, ncol=nyears)
   
   for (h in 1:posterior_ss){
@@ -426,7 +439,7 @@ for(m in 1:length(sp.list)) {
     pred.yr[h,]<-t(with(tmp1, aggregate (pred, list(survey_year), mean, na.action=na.omit))$x)
   }
   
-  mn.yr1<-NULL
+    mn.yr1<-NULL
   mn.yr1<-matrix(nrow=nyears, ncol=4)
   
   for(g in 1:nyears){
@@ -443,7 +456,7 @@ for(m in 1:length(sp.list)) {
   
   mn.yr1$results_code<-"OWLS"
   mn.yr1$version<-max.yr
-  mn.yr1$area_code<-"QC"
+  mn.yr1$area_code<-unique(event.data$StateProvince)
   mn.yr1$year<-mn.yr1$survey_year
   mn.yr1$season<-"Breeding"
   mn.yr1$period<-"all years"
@@ -467,7 +480,7 @@ for(m in 1:length(sp.list)) {
   
   mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
   
-  write.table(mn.yr1, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
+  write.table(mn.yr1, paste(out.dir, collection, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
   
   alpha_samps1 <- post1[grep("alpha_i", post1$par_names), ]
   row.names(alpha_samps1) <- NULL
@@ -487,7 +500,7 @@ for(m in 1:length(sp.list)) {
     group_by(StateProvince) %>%
     summarise(med_alpha=median(val), lcl_alpha=quantile(val, probs=0.025),
               ucl_alpha=quantile(val, probs=0.975), iw_alpha=ucl_alpha-lcl_alpha,
-              n=n()/posterior_ss); head(alpha_prov)
+              n=dplyr::n()/posterior_ss); head(alpha_prov)
   alpha_prov$taxa_code <- sp.list[m]
   
   
@@ -505,16 +518,14 @@ for(m in 1:length(sp.list)) {
   
   
   #need to back assign the factor alpha_id to its original value
-  id_grid<-sp.data %>% ungroup() %>% dplyr::select(alpha_i, id) %>% distinct()
   post_sum<-merge(post_sum, cell_id, by="alpha_i")
   post_sum$taxa_code<-sp
   
-  
-  #output for SoBC. This is clunky, but clear. 
+    #output for SoBC. This is clunky, but clear. 
   tau_cell<-post_sum
   tau_cell$results_code<-"OWLS"
   tau_cell$version<-max.yr
-  tau_cell$area_code<-tau_cell$id
+  tau_cell$area_code<-tau_cell$cell_id
   tau_cell$species_code<-""
   tau_cell$species_id<-sp.id
   tau_cell$season<-"Breeding"
@@ -558,7 +569,7 @@ for(m in 1:length(sp.list)) {
   trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
   # Write data to table
-  write.table(trend.csv, file = paste(out.dir, 
+  write.table(trend.csv, file = paste(out.dir, collection, 
                                       "NOS_TrendsSlope", ".csv", sep = ""),
               row.names = FALSE, 
               append = TRUE, 

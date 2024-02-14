@@ -4,7 +4,7 @@
 #Import data using the naturecounts R package. 
 
 #first look in file. If it does not exist, download from database.
-data <-try(read.csv(paste(data.dir, collection, ".RawData.csv", sep = "")), silent = T)
+data <-try(read.csv(paste(dat.dir, collection, ".RawData.csv", sep = "")), silent = T)
 
 if(class(data) == 'try-error'){
   
@@ -101,17 +101,59 @@ for(k in 1:nrow(protcol)) {
   #reassign routes to correct provinces and add SiteCode to QC
   if(protocol_id=="35"){
     dat$StateProvince[dat$StateProvince  == "ON"]  <- "QC"  
-    
     dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "StopNo"), sep="-", remove=FALSE) %>% dplyr::select (-del1, -del2) %>% mutate(SiteCode2= paste(RouteIdentifier, StopNo, sep="-")) %>% select(-StopNo)
-    
     dat<-dat %>% mutate(SiteCode = ifelse(is.na(SiteCode), SiteCode2, SiteCode)) %>% select(-SiteCode2)
     
   }
   
+    #Ontario specific data cleaning because a route was surveyed multiple times per year in the early years. We want to just select one
+  if(protocol_id=="22" | protocol_id=="36"){
+   
+  dat$StateProvince[dat$StateProvince  == "QC"]  <- "ON"  
+ 
+  #add day of year (doy) to dataframe to be used later 
+  dat <- dat %>%
+    mutate(date = ymd(paste(survey_year, survey_month, survey_day, sep = "/")),
+           doy = yday(date))
+  
+  test<-dat %>% drop_na(doy)
+  
+  #since there is no window field we need to select the last survey date for those that have multiple surveys per route within a year
+  
+  #group by year and route to see unique survey months/days
+  survey <- dat %>% group_by(SurveyAreaIdentifier, survey_year)%>%
+    dplyr::summarize(sample_events=n_distinct(survey_month))
+  
+  #merge back with main dataframe 
+  dat<-left_join(dat, survey, by= c("SurveyAreaIdentifier", "survey_year"))
+  
+  #subset out the data with sample_events>1
+  subdat<-subset(dat, sample_events>1)
+  
+  #want to select the max day for each Year SurveryAreaIdentifier combo with more then one sampling event
+  maxday<-subdat %>% group_by(SurveyAreaIdentifier, survey_year)%>%
+    dplyr::summarize(maxday=max(doy))
+  
+  #merge back with main data, eliminate the unwanted data, select needed columns
+  dat<-left_join(dat, maxday, by= c("SurveyAreaIdentifier", "survey_year"))
+  dat$check<-dat$maxday-dat$doy
+  dat$check[is.na(dat$check)] <- 0
+  dat<-dat%>%filter(check==0)
+  dat<-dat%>% dplyr::select(-date, -sample_events, -maxday, -check)
+  
+  } #end Ontario specific data cleaning
+
+  #need to remove duplicates which are in the Remarks field of the BMDE then the remarks field can be safely removed. In othewords, keep the NAs. First we need to create a new level for the factor and add the level 0. Then replace NA with 0 and filter for 0. 
+  #levels <- levels(dat$Remarks2)
+  #levels[length(levels) + 1] <- "0"
+  #dat$Remarks2 <- factor(dat$Remarks2, levels = levels)
+  #dat$Remarks2[is.na(dat$Remarks2)] <- 0
+  #dat<-dat %>% filter(Remarks2=="0")
+  
   #Subset data to specified year range
   #max.yr <- anal.param[k,"max.year"]
   dat <- dat %>% filter(survey_year >= min.yr & survey_year <= max.yr)
-  
+    
   ##____________________________________________________________________
   #Create a dataframe with a single lat long per route ID (what the first stop in a route). This is necessary because some Ontario routes only have a lat long for the first stop in a route. 
   loc.dat <-NULL #clear old

@@ -49,6 +49,7 @@ if(!dir.exists("plots")) dir.create("plots")
 
 out.dir <- paste("output/")
 dat.dir <- paste("data/")
+plot.dir<-paste("plots/")
 
 ## Source scripts
 source("./functions/LOESS.R")
@@ -72,3 +73,33 @@ epsg6703km <- paste(
 #load species names list
 sp.names<-meta_species_taxonomy()
 sp.names<-sp.names %>% dplyr::select(species_id, english_name, scientific_name)
+
+##-----------------------------------------------------------
+#Create plot functions
+
+make_plot_field <- function(data_stk, scale_label) {
+  ggplot() +
+    annotation_map_tile(type = "osm", zoomin = 0) +
+    geom_sf(fill = NA) +
+    coord_sf(datum = NA) +
+    geom_spatraster(data = data_stk) +
+    labs(x = "", y = "") +
+    scale_fill_viridis(option="magma", scale_label, na.value="transparent")+
+    #scale_fill_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
+    theme_bw() +
+    geom_sf(fill = NA)
+}
+
+make_plot_site <- function(data, scale_label) {
+  ggplot() +
+    annotation_map_tile(type = "osm", zoomin = 0) +
+    geom_sf() +
+    coord_sf(datum = NA) +
+    geom_sf(data = data, size = 5, mapping = aes(colour = value)) +
+    labs(x = "", y = "") +
+    scale_colour_viridis(option="magma", scale_label, na.value="transparent")+
+    #scale_colour_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
+    theme_bw() +
+    geom_sf(fill = NA)
+}
+

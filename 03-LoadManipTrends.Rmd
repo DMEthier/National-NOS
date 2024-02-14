@@ -38,6 +38,10 @@ list.coll<-unique(anal.param$collection)
 #select your collection manually
 collection <- "ONOWLS"
 
+#pull up the provincial basemap
+canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km ) 
+qq <- filter(canada, name == "Québec")
+
 ```
 
 ## Output Tables
@@ -105,7 +109,7 @@ source("ii-datamanip.R")
 
 ```{r analysis}
 
-source("iii-icaranaly.R")
+source("iii-icar.R")
 
 ```
 
@@ -113,17 +117,15 @@ source("iii-icaranaly.R")
 
 ```{r analysis}
 
-source("iii-spdeanaly.R")
+source("vi-spde.R")
 
 ```
-
-
 
 ## Plot Trends 
 
 ```{r Plot trends}
 
-source("iii_plottrend.R")
+source("v_plots.R")
 
 ```
 
