@@ -52,6 +52,9 @@ min.yr<-min(dat$survey_year)
 sp.names<-meta_species_taxonomy()
 sp.names<-sp.names %>% select(species_id, english_name, scientific_name)
 
+if(collection=="ATOWLS"){
+  events$StateProvince<-"Atlantic"
+}
 
 ##----------------------------------------------------------
 #Create species analysis loop
@@ -456,7 +459,7 @@ for(m in 1:length(sp.list)) {
   
   mn.yr1$results_code<-"OWLS"
   mn.yr1$version<-max.yr
-  mn.yr1$area_code<-unique(event.data$StateProvince)
+  mn.yr1$area_code<-unique(events$StateProvince)
   mn.yr1$year<-mn.yr1$survey_year
   mn.yr1$season<-"Breeding"
   mn.yr1$period<-"all years"

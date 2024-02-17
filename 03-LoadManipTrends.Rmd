@@ -28,7 +28,7 @@ source("00-setup.R")
 
 ```
 
-## Choose a collection to be downloaded. 
+## Choose a collection to be downloaded and prepare the provincial basemap
 
 ```{r downloaddata, echo = TRUE, message = FALSE}
 
@@ -36,31 +36,23 @@ source("00-setup.R")
 list.coll<-unique(anal.param$collection)
 
 #select your collection manually
-collection <- "ONOWLS"
+collection <- "MBOWLS"
 
-#pull up the provincial basemap
-canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km ) 
-qq <- filter(canada, name == "Québec")
+#pull up the provincial basemap manually
+canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
+qq <- filter(canada, name %in% c("Manitoba"))
 
 ```
 
 ## Output Tables
 
-Create the output tables. This only needs to be done once per analysis
+Create the output tables. This only needs to be done once per provincal analysis
 
 ```{r data manip}
 
 source("i-output.R")
 
 ```
-
-#Data Download
-
-The NOS data are downloaded using the `naturecounts` R package. Detailed instruction on how to use the `naturecounts` R pacakge can be found in [NatureCounts: An Introductory Tutorial](link%20to%20be%20provided) or on the [github](https://birdstudiescanada.github.io/naturecounts/index.html) repository. These instructions are not repeated here.
-
-To access the NOS collections you must [sign up](https://www.birdscanada.org/birdmon/default/register.jsp) for a **free** account and request permission from the data custodian to access each `collection`. Once assess has been granted to can retrieve the data using the `request_id` provided. Also, don't forget to enter your personal `username` below. You will be promoted for your password.
-
-There are many build in options which enable you to select temporal and/or spatial filters prior to download. If you want targeted data, you should add filters to the code chunk below. Because we will need additional auxiliary data from the [Bird Monitoring Data Exchange] (<https://www.birdscanada.org/birdmon/default/nc_bmde.jsp>) (BMDE) table in NatureCounts, we will want to change the `field_set` to "extend" and the `username` to your own account.
 
 
 ## Data manipulations 

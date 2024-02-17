@@ -13,6 +13,10 @@ if(class(data) == 'try-error'){
  
 }
 
+if(collection == "MBOWLS"){
+  data<-data %>% filter (protocol_id != 29) #remove old MB data collected under an old procol
+}
+
 #Now that the data are downloaded we will want to select the columns needed for the analysis. You may not have all the variables below if you didn't change the `field_set` to "extend". That is OK! You may not need all the auxiliary data for your analytical purposes.
 in.data<-data %>% select(SamplingEventIdentifier, SurveyAreaIdentifier,RouteIdentifier, Locality, SiteCode, collection, survey_day, survey_month, survey_year, survey_week, ProtocolCode, CollectorNumber, EffortUnits1, EffortMeasurement1, EffortUnits3, EffortMeasurement3, EffortUnits5, EffortMeasurement5, EffortUnits11, EffortMeasurement11, EffortUnits14, EffortMeasurement14, species_id, CommonName, ScientificName, latitude, longitude, bcr, StateProvince, ObservationDescriptor, ObservationCount, ObservationDescriptor2, ObservationCount2,ObservationDescriptor3, ObservationCount3)
 
@@ -41,6 +45,12 @@ in.data<-in.data %>% filter (!is.na(ProtocolCode))
 #Remove surveys with NOCTOWLS protocol ID
 in.data<-in.data %>% filter (ProtocolCode != "NOCTOWLS")
 
+#remove commas from names of this messes up the columns when they are re-imported. 
+
+in.data[,'RouteIdentifier'] <- gsub(",","",in.data[,'RouteIdentifier'])
+in.data[,'SiteCode'] <- gsub(",","",in.data[, 'SiteCode'])
+
+
 #If you are using the BC data and want to assign `ProtocolCode` to differentiate regions. First you need to assign BC new protocol ID since this is not done in the underlying database to reflect difference in data collection between region.
 
 #Use this previously loaded table: Regions_BCY.csv
@@ -57,9 +67,12 @@ in.data<-in.data %>% filter (!is.na(ProtocolCode))
 in.data$StateProvince[in.data$StateProvince  == "Ontario"]  <-  "ON"
 in.data$StateProvince[in.data$StateProvince  == "British Columbia and Yukon"]  <-  "BCY"
 in.data$StateProvince[in.data$StateProvince  == "ME"]  <- "QC"
-in.data$StateProvince[in.data$StateProvince  == "NL"]  <- "QC"
+#in.data$StateProvince[in.data$StateProvince  == "NL"]  <- "QC"
 in.data$StateProvince[in.data$StateProvince  == "Manitoba"]  <- "MB"
 in.data$StateProvince[in.data$StateProvince  == "MN"]  <- "MB"
+
+#not positive were this route is located. 
+in.data<-in.data %>%filter(RouteIdentifier!="NL011")
 
 #Next we add a day-of-year column using the `format_dates` [helper function](https://birdstudiescanada.github.io/naturecounts/reference/format_dates.html).
 #create a doy variable with the `format_dates` NatureCounts function. 
@@ -69,7 +82,7 @@ in.data<-format_dates(in.data)
 #loop through each row in the analysis parameter files is doing multiple protocol
 
 filter<-collection
-protcol<-anal.param %>% filter(collection == filter)
+protcol<-anal.param %>% dplyr::filter(collection == filter)
 
 for(k in 1:nrow(protcol)) {
   
