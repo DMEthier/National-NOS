@@ -33,9 +33,6 @@ if(class(data) == 'try-error'){
 }
 } #end else
  
-
-
-
 #Notice here that we don't keep all the ObservationCount fields. There are more that could be retained that capture owls call during each broadcast period.
 #For the purposes of this analysis, we keep ObservationCount2 + ObservationCount3 = Number of owls detected before call playback is used (i.e., silent listening period only). This is nationally standardized. Some protocols do not have call playback, and we can therefore use ObservationCount (totals) for the analysis. 
 #If you want to keep all counts, inclusive of the silent listening + call playback, keep ObservationCount.  
@@ -70,7 +67,7 @@ in.data<-in.data %>% filter(!(RouteIdentifier %in% c("50N/Gaudry Road", "50N/Gau
 
 if(collection=="BCOWLS"){
 in.data<-left_join(in.data, BCregion, by="RouteIdentifier")
-in.data$ProtocolCode <- ifelse(in.data$collection=="BCOWLS", in.data$protocol_id_new, in.data$ProtocolCode)
+in.data$ProtocolCode <- in.data$protocol_id_new
 in.data<-in.data %>% select(-Timing.Region, -protocol_id_new)
 in.data<-in.data %>% filter (!is.na(ProtocolCode))
 }

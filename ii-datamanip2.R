@@ -249,11 +249,11 @@ if(protocol_id != "157"){
   #Because we have different data collection methods, the response variable for each protocol may be ObservationCount2+ObservationCount3 = ObservationCount OR ObservationCount depending on how the data are recorded. The Analysis Parameters files will specify this for each protocol under the `obs` column. 
   
   #Use this code is you would like to use just the date collected during the first 2 min
-  #if(obs=="ObservationCount1"){
-  #dat$ObservationCount2<-ifelse(is.na(dat$ObservationCount2), 0, 1)
-  #dat$ObservationCount3<-ifelse(is.na(dat$ObservationCount3), 0, 1)
-  #dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | ObservationCount3==1, 1, 0))    
-  #}
+  if(obs=="ObservationCount1"){
+  dat$ObservationCount2<-ifelse(is.na(dat$ObservationCount2), 0, 1)
+  dat$ObservationCount3<-ifelse(is.na(dat$ObservationCount3), 0, 1)
+  dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | ObservationCount3==1, 1, 0))    
+  }
   
   if(protocol_id != "157"){
     if(protocol_id != "151"){
@@ -299,13 +299,13 @@ if(protocol_id != "157"){
   Owls<-NULL
   Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, ProtocolCode, doy,  CommonName, species_id, ObservationCount, StateProvince)
   
-  write.table(Owls, file = paste(out.dir,  collection, "OwlDataClean.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  write.table(Owls, file = paste(out.dir,  collection, "OwlDataClean2.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
   #print the event.data to file 
   #write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
   
   Events<-NULL
   Events<-event.data 
-  write.table(Events, file = paste(out.dir, collection, "Events",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  write.table(Events, file = paste(out.dir, collection, "Events2",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
 } #end loop
