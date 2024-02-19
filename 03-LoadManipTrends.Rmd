@@ -36,11 +36,11 @@ source("00-setup.R")
 list.coll<-unique(anal.param$collection)
 
 #select your collection manually
-collection <- "MBOWLS"
+collection <- "ABOWLS"
 
 #pull up the provincial basemap manually
 canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
-qq <- filter(canada, name %in% c("Manitoba"))
+qq <- filter(canada, name %in% c("Alberta"))
 
 ```
 
@@ -93,7 +93,9 @@ Column definitions
 
 ```{r data manip}
 
-source("ii-datamanip.R")
+source("ii-datamanip.R") #Total Observation Count
+
+source("ii-datamanip2.R") #Silent Listening Period ONLY
 
 ```
 
@@ -109,11 +111,11 @@ source("iii-icar.R")
 
 ```{r analysis}
 
-source("vi-spde.R")
+source("iv-spde.R")
 
 ```
 
-## Plot Trends 
+## Combine Provinical Outputs and Plot 
 
 ```{r Plot trends}
 
@@ -121,3 +123,11 @@ source("v_plots.R")
 
 ```
 
+## Stitch together outputs for Catherine
+
+
+```{r final outputs}
+
+source("vi_combine.R")
+
+```

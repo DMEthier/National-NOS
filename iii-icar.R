@@ -7,7 +7,7 @@ events<-read.csv(paste(out.dir, collection, "Events.csv", sep=""))
 events<-events %>% na.omit() %>% distinct()
 
 loc.dat<-read.csv(paste(out.dir, "Map", collection, ".csv", sep=""))
-loc.dat<-loc.dat %>% na.omit() %>% distinct()
+loc.dat<-loc.dat %>% na.omit() %>% distinct() %>% filter(latitude != "NULL")
 
 #Make Spatial Grid for iCAR Analysis
 
@@ -70,6 +70,9 @@ for(m in 1:length(sp.list)) {
   
   print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
   
+  sp.data$survey_year<-as.numeric(sp.data$survey_year)
+  events$survey_year<-as.numeric(events$survey_year)
+  sp.data$ObservationCount<-as.numeric(sp.data$ObservationCount)
   
   ##-----------------------------------------------------------
   #zero fill by merging with the events dataframe. 
@@ -82,7 +85,7 @@ for(m in 1:length(sp.list)) {
   
   ##----------------------------------------------------------
   #Observations per route summary
-  route.sum<-sp.data %>% group_by(survey_year, RouteIdentifier) %>% summarise(count = sum(ObservationCount))
+    route.sum<-sp.data %>% group_by(survey_year, RouteIdentifier) %>% summarise(count = sum(ObservationCount))
   route.sum<-cast(route.sum, RouteIdentifier~survey_year, value="count")
   
   write.table(route.sum, paste(out.dir, sp.list[m], "_", collection, "_SpeciesRouteCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
@@ -98,7 +101,6 @@ for(m in 1:length(sp.list)) {
   # Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
   
   site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
-  
   site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
   site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
   
@@ -110,7 +112,6 @@ for(m in 1:length(sp.list)) {
   # Summarize years to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
   
   yr.summ <- melt(sp.data, id.var = "survey_year",	measure.var = "ObservationCount")
-  
   yr.summ <- cast(yr.summ, survey_year ~ variable,	fun.aggregate="sum")
   yr.sp.list <- unique(subset(yr.summ, select = c("survey_year"), ObservationCount >= 1))
   
@@ -121,12 +122,13 @@ for(m in 1:length(sp.list)) {
   # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
   sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, cell_id, nstop, StateProvince, bcr, latitude, longitude) %>% dplyr::summarise(count=sum(ObservationCount))
   sp.data$species_id<-sp.id  
-  max.yr<-max(sp.data$survey_year)
-  min.yr<-min(sp.data$survey_year)
+  max.yr<-as.numeric(max(sp.data$survey_year))
+  min.yr<-as.numeric(min(sp.data$survey_year))
   
   ##-----------------------------------------------------------
   #standardize year to 2023, prepare index variables 
   #where i = grid cell, k = route, t = year
+  sp.data<-as.data.frame(sp.data)
   sp.data <- sp.data %>% mutate(std_yr = survey_year - max.yr)
   sp.data$kappa_k <- as.integer(factor(sp.data$RouteIdentifier)) #index for the random site effect
   sp.data$tau_i <- sp.data$alpha_i <- as.integer(factor(sp.data$cell_id)) #index for each id intercept and slope

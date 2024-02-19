@@ -593,6 +593,6 @@ meshmap2<-ggplot() +
   labs(x = "", y = "")  
 
 pdf(paste(plot.dir, collection, "_MeshPlot.pdf", sep=""))
-meshmap2
+plot(meshmap2)
 while(!is.null(dev.list())) dev.off()
 
