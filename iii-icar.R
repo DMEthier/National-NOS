@@ -1,9 +1,9 @@
 #iCAR analysis
 
-dat<-read.csv(paste(out.dir, collection, "OwlDataClean.csv", sep=""))
+dat<-read.csv(paste(out.dir, collection, protocol_id, "OwlDataClean.csv", sep=""))
 dat<-dat %>% na.omit()
 
-events<-read.csv(paste(out.dir, collection, "Events.csv", sep=""))
+events<-read.csv(paste(out.dir, collection, protocol_id, "Events.csv", sep=""))
 events<-events %>% na.omit() %>% distinct()
 
 loc.dat<-read.csv(paste(out.dir, "Map", collection, ".csv", sep=""))

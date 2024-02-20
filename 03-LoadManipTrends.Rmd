@@ -34,13 +34,10 @@ source("00-setup.R")
 
 #list the collections
 list.coll<-unique(anal.param$collection)
+list.prot<-unique(anal.param$protocol_id)
 
-#select your collection manually
-collection <- "BCOWLS"
-
-#pull up the provincial basemap manually
-canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
-qq <- filter(canada, name %in% c("British Columbia"))
+#select your collection manually for data clearning
+collection <- "ATOWLS"
 
 ```
 
@@ -50,46 +47,14 @@ Create the output tables. This only needs to be done once per provincal analysis
 
 ```{r data manip}
 
-source("i-output.R")
+source("i-output.R") #Total count period output tables
+
+source("i-output2.R") #Silent listening period output tables
 
 ```
 
 
 ## Data manipulations 
-
-A file was created that outlines analysis parameters for various
-Provinces.
-
-**Alberta still needs assigned a protocol_id. Need to double check which
-provinces have 2 listening periods in the database**
-
-Column definitions
-
--   collection: each province/region has a unique collection ID
-
--   protocol_id: protocol vary between provinces, and some
-    provinces/regions have several protocols within them. However, not
-    all protocol_id are specified in this field and need to be parsed
-    out using auxiliary data (e.g., BCOWLS uses the BCregions to
-    differentiate protocol_id)
-
--   min.year: start year of survey
-
--   max.year: end year of survey, or set to NA if ongoing
-
--   temp: min temperature cut off for survey
-
--   min.doy: the earliest day of the year a survey should be run
-
--   max.doy: the latest day of the year a survey should be run
-
--   interval: indicates if the two minute silent listening periods is
-    recorded in 1 or 2 data columns. If 2 data columns then these
-    datasets are ideal for modelling the detection process
-
--   obs: the observation count type that should be used for the national
-    analysis.
-
 
 ```{r data manip}
 
@@ -110,6 +75,11 @@ source("iii-icar.R")
 ## Data Analysis SPDE
 
 ```{r analysis}
+
+
+#pull up the provincial basemap manually
+canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
+qq <- filter(canada, name %in% c("British Columbia"))
 
 source("iv-spde.R")
 

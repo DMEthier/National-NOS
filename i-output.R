@@ -1,20 +1,5 @@
 #Write output tables suitable for SoCB
 
-#Create the output tables for writing the data cleaning results
-Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
-names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "bcr")
-#only need to create the table once per analysis   
-write.table(Events, file = paste(out.dir, collection, "Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-
-Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 11, byrow = FALSE, dimnames = NULL))
-names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "ProtocolCode", "doy",  "CommonName", "species_id", "ObservationCount", "StateProvince")
-#only need to create the table once per analysis   
-write.table(Owls, file = paste(out.dir, collection, "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-
-Loc<-as.data.frame(matrix(data=NA, nrow=1, ncol=4, byrow=FALSE, dimnames=NULL))
-names(Loc)<-c("RouteIdentifier", "latitude", "longitude", "bcr")
-write.table(Loc, file=paste(out.dir, "Map", collection, ".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-
 #Posterior Summary
 post_sum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 12, byrow = FALSE, dimnames = NULL))
 names(post_sum) <- c("alpha_i", "alph", "alph_ll", "alph_ul", "alph_iw", "tau", "tau_ll", "tau_ul", "tau_iw", "tau_sig", "id", "taxa_code")
