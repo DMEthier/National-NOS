@@ -1,13 +1,22 @@
 #spde analysis
 
-dat<-read.csv(paste(out.dir, collection, "OwlDataClean.csv", sep=""))
-dat<-dat %>% na.omit()
+#dat<-read.csv(paste(out.dir, collection, "OwlDataClean.csv", sep=""))
+#dat<-dat %>% na.omit()
 
-events<-read.csv(paste(out.dir, collection, "Events.csv", sep=""))
-events<-events %>% na.omit() %>% distinct()
+#events<-read.csv(paste(out.dir, collection, "Events.csv", sep=""))
+#events<-events %>% na.omit() %>% distinct()
 
-loc.dat<-read.csv(paste(out.dir, "Map", collection, ".csv", sep=""))
-loc.dat<-loc.dat %>% na.omit() %>% distinct()
+#loc.dat<-read.csv(paste(out.dir, "Map", collection, ".csv", sep=""))
+#loc.dat<-loc.dat %>% na.omit() %>% distinct()
+
+events <- read.csv("output/AllEventsNOS.csv")
+dat <- read.csv("output/AllDataClearNOS.csv")
+loc.dat <- read.csv("output/AllLocNOS.csv")
+
+##Min Year and Max Year Filter for National Analysis 
+min.yr<-2008
+max.yr<-2021
+
 
 #Add UTM coords
 UTM<-lonlat2utm( 
@@ -17,22 +26,25 @@ UTM<-lonlat2utm(
 events$Easting<-UTM$easting
 events$Northing<-UTM$northing
 
-events<-events %>% select(SiteCode, RouteIdentifier, survey_year, latitude, longitude, Easting, Northing, bcr) %>% distinct()
+events<-events %>% select(SiteCode, RouteIdentifier, survey_year, latitude, longitude, Easting, Northing, protocol_id) %>% distinct()
 
 ##---------------------------------------------------------
 #Set up data for analysis
-
 dat<-dat %>% dplyr::select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "ObservationCount", "StateProvince")
-sp.list<-unique(dat$CommonName)
+#sp.list<-unique(dat$CommonName)
+
+#create species list for national assessment
+#sp.list<-c("Barred Owl", "Boreal Owl", "Great Gray Owl", "Great Horned Owl", "Long-eared Owl", "Northern Saw-whet Owl", "Flammulated Owl", "Eastern Screech-Owl")
+sp.list<-c("Barred Owl", "Boreal Owl", "Great Gray Owl", "Great Horned Owl", "Long-eared Owl", "Northern Saw-whet Owl")
 
 #load species names list
 sp.names<-meta_species_taxonomy()
 sp.names<-sp.names %>% dplyr::select(species_id, english_name, scientific_name)
 
-if(collection == "ATOWLS"){
-  events$StateProvince<- "Atlantic"
-  dat$StateProvince<-"Atlantic"
-}
+#if(collection == "ATOWLS"){
+#  events$StateProvince<- "Atlantic"
+#  dat$StateProvince<-"Atlantic"
+#}
 
 ##----------------------------------------------------------
 #Create species analysis loop
@@ -50,16 +62,13 @@ for(m in 1:length(sp.list)) {
     
     print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
     
-    StateProv<-unique(sp.data$StateProvince)
-    
     ##-----------------------------------------------------------
     #zero fill by merging with the events dataframe. 
     sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
     
     sp.data$CommonName<-sp
     sp.data$species_id<-sp.id
-    
-    sp.data$StateProvince<-StateProv
+    #sp.data$StateProvince<-StateProv
     
     ##-----------------------------------------------------------
     #Remove routes that do not have at least one observation of the species
@@ -74,7 +83,6 @@ for(m in 1:length(sp.list)) {
     # Limit to years when a species was observed at least once  
     # Summarize years to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
     yr.summ <- melt(sp.data, id.var = "survey_year",	measure.var = "ObservationCount")
-    
     yr.summ <- cast(yr.summ, survey_year ~ variable,	fun.aggregate="sum")
     yr.sp.list <- unique(subset(yr.summ, select = c("survey_year"), ObservationCount >= 1))
     
@@ -85,7 +93,7 @@ for(m in 1:length(sp.list)) {
     
     ##-----------------------------------------------------------
     # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
-    sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, bcr, latitude, longitude, Easting, Northing) %>% summarise(count=sum(ObservationCount))
+    sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, latitude, longitude, Easting, Northing, protocol_id) %>% summarise(count=sum(ObservationCount))
     
     ##-----------------------------------------------------------
     #Create index variables
@@ -98,6 +106,7 @@ for(m in 1:length(sp.list)) {
         std_yr = survey_year - max.yr,
         obs = seq_len(nrow(.)),
         site_idx = as.numeric(factor(paste(RouteIdentifier))),
+        protocol_idx = as.numeric(factor(paste(protocol_id))),
         year_idx = as.numeric(factor(survey_year)),
         site_year_idx = paste0(RouteIdentifier, "-", survey_year)) %>%
       st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE) %>%
@@ -121,8 +130,7 @@ for(m in 1:length(sp.list)) {
       scale_color_distiller(palette = "Spectral") +
       theme_bw()  
     
-    
-    pdf(paste(plot.dir, collection, "_", sp.list[m], "_SamplePlot.pdf", sep=""))
+    pdf(paste(plot.dir, sp.list[m], "_SamplePlot.pdf", sep=""))
     plot(sampleplot)
     while(!is.null(dev.list())) dev.off()
     
@@ -163,6 +171,7 @@ for(m in 1:length(sp.list)) {
     # components
     svc_components <- ~ -1 +
       kappa(site_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+      ellip(protocol_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
       alpha(geometry, model = spde) +
       tau(geometry, weights = std_yr, model = spde)+
       # route-year effect
@@ -187,12 +196,11 @@ for(m in 1:length(sp.list)) {
     )
     
     res$summary.hyperpar[-1, c(1, 2)]
-    
     summary(exp(res$summary.random$alp$"0.5quant")) # exp(alpha) posterior median
     summary((exp(res$summary.random$tau$"0.5quant") - 1) * 100) # (exp(tau)-1)*100
     
     #SVC Map
-    # get easting and northing limits
+    #get easting and northing limits
     bbox <- fm_bbox(hull[[1]])
     grd_dims <- round(c(x = diff(bbox[[1]]), y = diff(bbox[[2]])) / 25)
     
@@ -294,7 +302,7 @@ for(m in 1:length(sp.list)) {
     # plot together
     #multiplot(ps, pa, pt, ps_range95, pa_range95, pt_range95, cols = 2)
     
-    pdf(paste(plot.dir, collection, "_", sp.list[m], "_spdePlot.pdf", sep=""))
+    pdf(paste(plot.dir, sp.list[m], "_spdePlot.pdf", sep=""))
     multiplot(pa, pt)
     while(!is.null(dev.list())) dev.off()
     
@@ -381,7 +389,7 @@ for(m in 1:length(sp.list)) {
     #multiplot(ps, pa2, pt2, ps_range95, pa2_range95, pt2_range95, cols = 2)
     #multiplot(pa, pt, pa2, pt2, cols=2)
     
-    pdf(paste(plot.dir, collection, "_", sp.list[m], "_spdeRoutePlot.pdf", sep=""))
+    pdf(paste(plot.dir, sp.list[m], "_spdeRoutePlot.pdf", sep=""))
     multiplot(pa2, pt2)
     while(!is.null(dev.list())) dev.off()
     
@@ -449,7 +457,7 @@ for(m in 1:length(sp.list)) {
     trend.csv<-tau_route %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
     
     # Write data to table
-    write.table(trend.csv, file = paste(out.dir, collection, 
+    write.table(trend.csv, file = paste(out.dir, 
                                         "NOS_TrendsSlope", ".csv", sep = ""),
                 row.names = FALSE, 
                 append = TRUE, 
@@ -576,7 +584,7 @@ for(m in 1:length(sp.list)) {
       
       d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
       
-      write.table(d3, paste(out.dir, collection, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+      write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
       
     } #end route specific loop
     

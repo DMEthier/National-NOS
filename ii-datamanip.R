@@ -10,7 +10,7 @@ data<-read.csv("data/ABOWLS_BMDE.csv")
 
 #Now that the data are downloaded we will want to select the columns needed for the analysis. You may not have all the variables below if you didn't change the `field_set` to "extend". That is OK! You may not need all the auxiliary data for your analytical purposes.
 data$ProtocolCode<-data$protocol_id
-in.data<-data %>% select(SamplingEventIdentifier, SurveyAreaIdentifier, Locality, SiteCode, collection, survey_day, survey_month, survey_year, survey_week, ProtocolCode, CollectorNumber, EffortUnits1, EffortMeasurement1, species_id, CommonName, ScientificName, Latitude, Longitude, bcr, StateProvince, ObservationCount, ObservationCount2, ObservationCount3) %>% dplyr::rename(latitude = Latitude, longitude = Longitude)
+in.data<-data %>% select(SamplingEventIdentifier, SurveyAreaIdentifier, Locality, SiteCode, collection, survey_day, survey_month, survey_year, survey_week, protocol_id, CollectorNumber, EffortUnits1, EffortMeasurement1, species_id, CommonName, ScientificName, Latitude, Longitude, bcr, StateProvince, ObservationCount, ObservationCount2, ObservationCount3) %>% dplyr::rename(latitude = Latitude, longitude = Longitude)
 in.data$RouteIdentifier<-in.data$SiteCode
 in.data$SiteCode<-in.data$SurveyAreaIdentifier
 
@@ -27,10 +27,11 @@ if(class(data) == 'try-error'){
     data<-data %>% filter (protocol_id != 29) #remove old MB data collected under an old procol
   }
   }
-} #end else
 
 #Now that the data are downloaded we will want to select the columns needed for the analysis. You may not have all the variables below if you didn't change the `field_set` to "extend". That is OK! You may not need all the auxiliary data for your analytical purposes.
-in.data<-data %>% select(SamplingEventIdentifier, SurveyAreaIdentifier,RouteIdentifier, Locality, SiteCode, collection, survey_day, survey_month, survey_year, survey_week, ProtocolCode, CollectorNumber, EffortUnits1, EffortMeasurement1, EffortUnits3, EffortMeasurement3, EffortUnits5, EffortMeasurement5, EffortUnits11, EffortMeasurement11, EffortUnits14, EffortMeasurement14, species_id, CommonName, ScientificName, latitude, longitude, bcr, StateProvince, ObservationDescriptor, ObservationCount, ObservationDescriptor2, ObservationCount2,ObservationDescriptor3, ObservationCount3)
+in.data<-data %>% select(SamplingEventIdentifier, SurveyAreaIdentifier,RouteIdentifier, Locality, SiteCode, collection, survey_day, survey_month, survey_year, survey_week, protocol_id, CollectorNumber, EffortUnits1, EffortMeasurement1, EffortUnits3, EffortMeasurement3, EffortUnits5, EffortMeasurement5, EffortUnits11, EffortMeasurement11, EffortUnits14, EffortMeasurement14, species_id, CommonName, ScientificName, latitude, longitude, bcr, StateProvince, ObservationDescriptor, ObservationCount, ObservationDescriptor2, ObservationCount2,ObservationDescriptor3, ObservationCount3)
+
+} #end else
 
 #Notice here that we don't keep all the ObservationCount fields. There are more that could be retained that capture owls call during each broadcast period.
 #For the purposes of this analysis, we keep ObservationCount2 + ObservationCount3 = Number of owls detected before call playback is used (i.e., silent listening period only). This is nationally standardized. Some protocols do not have call playback, and we can therefore use ObservationCount (totals) for the analysis. 
@@ -50,30 +51,27 @@ in.data<-in.data %>% filter (!is.na(survey_day), !is.na(survey_month), !is.na(su
 #Some Ontario Routes only have lat/long for the start point, so this can't be used for the national assessment. 
 #Remove surveys with missing lat long
 #in.data<-in.data %>% filter (!is.na(latitude), !is.na(longitude))
+
+if(collection=="ABOWLS"){
 in.data<-in.data %>% filter(latitude != "NULL", longitude != "NULL")
+}
 
 #Remove survyes with missing protocol ID 
-in.data<-in.data %>% filter (!is.na(ProtocolCode))
+in.data<-in.data %>% filter (!is.na(protocol_id))
 
 #Remove surveys with NOCTOWLS protocol ID
-#in.data<-in.data %>% filter (ProtocolCode != "NOCTOWLS") #This is Alberta's ProtocolCode
+#in.data<-in.data %>% filter (protocol_id != "NOCTOWLS") #This is Alberta's protocol_id
 
 #remove site who naming cause issue on re-import into R 
 in.data<-in.data %>% filter(!(RouteIdentifier %in% c("50N/Gaudry Road", "50N/Gaudry Rd, St. L" )))
 
-#If you are using the BC data and want to assign `ProtocolCode` to differentiate regions. First you need to assign BC new protocol ID since this is not done in the underlying database to reflect difference in data collection between region.
-#Use this previously loaded table: Regions_BCY.csv
+if(collection=="BCOWLS"){ #need to parse old data into new protocol_id 
 
-if(collection=="BCOWLS"){
-in.data<-left_join(in.data, BCregion, by="RouteIdentifier")
-in.data$ProtocolCode <- in.data$protocol_id_new
-in.data<-in.data %>% select(-Timing.Region, -protocol_id_new)
-in.data<-in.data %>% filter (!is.na(ProtocolCode))
-}
-
-if(collection=="ATOWLS"){
-in.data$ProtocolCode[in.data$ProtocolCode == "NOCTOWLS"]<-"39"  
-  
+  in.data<-in.data %>% filter(protocol_id!=63)
+  in.data<-in.data %>% mutate(Route = str_replace_all(RouteIdentifier, "[^[:alnum:]]", ""))
+  in.data<-in.data %>% separate(Route, into = c("text", "num"), sep = "(?<=[A-Za-z])(?=[0-9])")
+  in.data<-in.data %>% mutate(protocol_id=ifelse(text=="F",999, protocol_id)) #FLAM survey
+  in.data<-in.data %>% select(-text, -num)
 }
 
 #You may want to fix some data inconsistencies in StateProvince naming. However, you may want to use `collection` or `ProtocolCode` rather than `StateProvince` to do the analysis since there are some points that cross the provincial boundaries. Something to consider. 
@@ -87,8 +85,10 @@ in.data$StateProvince[in.data$StateProvince  == "Manitoba"]  <- "MB"
 in.data$StateProvince[in.data$StateProvince  == "MN"]  <- "MB"
 in.data$StateProvince[in.data$StateProvince  == "Alberta"]  <- "AB"
 
+in.data<- in.data %>% filter(StateProvince != "NL")
+
 #not positive were this route is located. 
-in.data<-in.data %>%filter(RouteIdentifier!="NL011")
+#in.data<-in.data %>%filter(RouteIdentifier!="NL011")
 
 #Next we add a day-of-year column using the `format_dates` [helper function](https://birdstudiescanada.github.io/naturecounts/reference/format_dates.html).
 #create a doy variable with the `format_dates` NatureCounts function. 
@@ -100,34 +100,33 @@ in.data<-format_dates(in.data)
 filter<-collection
 protcol<-anal.param %>% dplyr::filter(collection == filter)
 
+#Create the output tables for writing the data cleaning results
+Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
+names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "protocol_id")
+#only need to create the table once per analysis   
+write.table(Events, file = paste(out.dir, collection, "Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 11, byrow = FALSE, dimnames = NULL))
+names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "protocol_id", "doy",  "CommonName", "species_id", "ObservationCount", "StateProvince")
+#only need to create the table once per analysis   
+write.table(Owls, file = paste(out.dir, collection, "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+Loc<-as.data.frame(matrix(data=NA, nrow=1, ncol=4, byrow=FALSE, dimnames=NULL))
+names(Loc)<-c("RouteIdentifier", "latitude", "longitude", "protocol_id")
+write.table(Loc, file=paste(out.dir, collection, "Map.csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
 for(k in 1:nrow(protcol)) {
   
   #Note: data from 2020 will be incomplete for most provinces due to COVID19. 
   #Pull the protocol-specific data you need for filtering from the Analysis Parameters file
   
-  protocol_id<-protcol[k,"protocol_id"]
+  id<-protcol[k,"protocol_id"]
   collection<-protcol[k, "collection"]
   min.yr <- protcol[k,"min.year"] 
   min.doy <- protcol[k,"min.doy"]
   max.doy <- protcol[k,"max.doy"]
   temp <- protcol[k,"temp"]
   obs<-protcol[k,"obs"]
-  
-  #Create the output tables for writing the data cleaning results
-  Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
-  names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "bcr")
-  #only need to create the table once per analysis   
-  write.table(Events, file = paste(out.dir, collection, protocol_id, "Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-  
-  Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 11, byrow = FALSE, dimnames = NULL))
-  names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "ProtocolCode", "doy",  "CommonName", "species_id", "ObservationCount", "StateProvince")
-  #only need to create the table once per analysis   
-  write.table(Owls, file = paste(out.dir, collection, protocol_id, "OwlDataClean",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-  
-  Loc<-as.data.frame(matrix(data=NA, nrow=1, ncol=5, byrow=FALSE, dimnames=NULL))
-  names(Loc)<-c("RouteIdentifier", "latitude", "longitude", "bcr", "ProtocolCode")
-  write.table(Loc, file=paste(out.dir, "Map", collection, protocol_id, ".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
-  
   
   #adjust to add a 7 day buffer on either side
   #Do this for all programs due to the influnce of weather on min and max day
@@ -139,22 +138,27 @@ for(k in 1:nrow(protcol)) {
   
   #subset data based on protocol_ID 
   dat<-NULL
-  dat<-in.data %>% filter(ProtocolCode == protocol_id)
+  dat<-in.data %>% filter(protocol_id == id)
   dat$ObservationCount[is.na(dat$ObservationCount)] <- 0
   dat$ObservationCount<-as.numeric(dat$ObservationCount)
   
   #reassign routes to correct provinces and add SiteCode to QC
-  if(protocol_id=="35"){
+  if(id=="35"){
     dat$StateProvince[dat$StateProvince  == "ON"]  <- "QC"  
     dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "StopNo"), sep="-", remove=FALSE) %>% dplyr::select (-del1, -del2) %>% mutate(SiteCode2= paste(RouteIdentifier, StopNo, sep="-")) %>% select(-StopNo)
     dat<-dat %>% mutate(SiteCode = ifelse(is.na(SiteCode), SiteCode2, SiteCode)) %>% select(-SiteCode2)
   }
 
+  ##NEEDS FIXED IN THE UNDERLYING DATA
+  #if(id=="150"){
+  #  dat$RouteIdentifier<-dat$SiteCode
+  #  dat$SiteCode<-dat$SurveyAreaIdentifier
+  #}
+  
   #Ontario specific data cleaning because a route was surveyed multiple times per year in the early years. We want to just select one
-  if(protocol_id=="22" | protocol_id=="36"){
-   
-  dat$StateProvince[dat$StateProvince  == "QC"]  <- "ON"  
- 
+  if(id=="22" | id=="36"){
+    dat$StateProvince[dat$StateProvince  == "QC"]  <- "ON"  
+  
   #add day of year (doy) to dataframe to be used later 
   dat <- dat %>%
     mutate(date = ymd(paste(survey_year, survey_month, survey_day, sep = "/")),
@@ -203,11 +207,14 @@ for(k in 1:nrow(protcol)) {
   loc.dat <-NULL #clear old
   
   #Using SamplingEvent
+  
+  if(collection == "QCOWLS"){
   loc.dat<-dat %>% separate(SamplingEventIdentifier, c("del1", "del2", "Stop"), sep="-", remove=FALSE) %>% select (-del1, -del2)
+  loc.dat<-loc.dat %>% filter(latitude!="NA") %>% arrange(Stop) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, protocol_id)
+  }
   
-  loc.dat<-loc.dat %>% filter(latitude!="NA") %>% arrange(Stop) %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, bcr, ProtocolCode)
-  
-  write.table(loc.dat, file = paste(out.dir, "Map", collection, protocol_id, ".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  loc.dat<-dat %>% filter(latitude!="NA") %>% distinct(RouteIdentifier, .keep_all = TRUE) %>% select(RouteIdentifier, latitude, longitude, protocol_id) %>% distinct()
+  write.table(loc.dat, file = paste(out.dir, collection, "Map.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
   ##____________________________________________________________________
   #Because in the early years the Ontario owls program ran upwards of 4 surveys/route/year, the duplicates will need to be removed. We run this script for all province since there are some other duplicate routes that have made their way into the database. 
@@ -221,8 +228,8 @@ for(k in 1:nrow(protcol)) {
   dat <- dat %>% group_by(SiteCode, survey_year)%>%
     slice_min(survey_day)
  
-if(protocol_id != "157"){
-  if(protocol_id != "151"){
+if(id != "157"){
+  if(id != "151"){
   ##______________________________________________________________
   #Filtering the data to standardized detectability. 
 
@@ -275,8 +282,8 @@ if(protocol_id != "157"){
   #dat<- dat %>% mutate(ObservationCount = ifelse (ObservationCount2==1 | ObservationCount3==1, 1, 0))    
   #}
   
-  if(protocol_id != "157"){
-    if(protocol_id != "151"){
+  if(id != "157"){
+    if(id != "151"){
   #now we no longer need these fields
   dat<-dat %>% select(-ObservationCount2, -ObservationCount3, -ObservationDescriptor2, -ObservationDescriptor3)
   
@@ -317,15 +324,14 @@ if(protocol_id != "157"){
   #write.csv(dat, paste(out.dir, collection, ".", protocol_id, ".csv", sep=""))
   
   Owls<-NULL
-  Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, ProtocolCode, doy,  CommonName, species_id, ObservationCount, StateProvince)
-  
-  write.table(Owls, file = paste(out.dir,  collection, protocol_id, "OwlDataClean.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  Owls<-dat %>% select(SiteCode, RouteIdentifier, survey_year, CollectorNumber, collection, protocol_id, doy,  CommonName, species_id, ObservationCount, StateProvince)
+   write.table(Owls, file = paste(out.dir,  collection, "OwlDataClean.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
   #print the event.data to file 
   #write.csv(event.data, paste(out.dir, collection, ".", protocol_id, ".EventData.csv", sep=""))
   
   Events<-NULL
   Events<-event.data 
-  write.table(Events, file = paste(out.dir, collection, protocol_id, "Events",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  write.table(Events, file = paste(out.dir, collection, "Events",".csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
 } #end loop

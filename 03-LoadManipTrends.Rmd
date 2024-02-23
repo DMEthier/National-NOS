@@ -36,8 +36,8 @@ source("00-setup.R")
 list.coll<-unique(anal.param$collection)
 list.prot<-unique(anal.param$protocol_id)
 
-#select your collection manually for data clearning
-collection <- "ATOWLS"
+#select your collection manually for data cleaning
+collection <- "QCOWLS"
 
 ```
 
@@ -68,7 +68,7 @@ source("ii-datamanip2.R") #Silent listening period
 
 ```{r analysis}
 
-source("iii-icar.R")
+source("iii-icar.R")  #Total count period, including a covariate for number of stops per route and random effect for protocol_id to control for unexplained variation due to differences in protocol. 
 
 ```
 

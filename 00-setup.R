@@ -13,6 +13,7 @@
 
 #Load libraries
 library(tidyverse)
+library(stringr)
 library(INLA)
 library(inlabru)
 library(VGAM)
@@ -60,9 +61,6 @@ source("./functions/LOESS.R")
 anal.param<-read.csv("Analysis Parameters.csv")
 #remove sites that we don't want for the national analysis
 anal.param<-anal.param %>% filter(!is.na(protocol_id)) %>% filter(protocol_id!=29)
-
-#BC specific
-BCregion<-read.csv("Regions_BCY.csv")
 
 epsg6703km <- paste(
   "+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5",
