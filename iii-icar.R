@@ -38,7 +38,7 @@ loc.dat <- list.files(path = "C:/Users/dethier/Documents/ethier-scripts/National
   bind_rows                                         # Combine data sets into one data set 
 
 r<-nrow(loc.dat)
-loc.dat<-loc[2:r,]
+loc.dat<-loc.dat[2:r,]
 loc.dat<-na.omit(loc.dat)
 write.csv(dat, "output/AllLocNOS.csv")
 

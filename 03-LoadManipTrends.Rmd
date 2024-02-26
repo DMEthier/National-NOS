@@ -78,8 +78,8 @@ source("iii-icar.R")  #Total count period, including a covariate for number of s
 
 
 #pull up the provincial basemap manually
-canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
-qq <- filter(canada, name %in% c("British Columbia"))
+qq <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
+#qq <- filter(canada, name %in% c("British Columbia"))
 
 source("iv-spde.R")
 
