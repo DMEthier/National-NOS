@@ -21,7 +21,8 @@ Also assign max year of the analysis.
 
 ```{r setup}
 
-max.yr <- 2023 #needs changes with each analysis
+min.yr <-2018
+max.yr <- 2021 #needs changes with each analysis
 ID<- "dethier" #change this to your user ID. You will be prompted for a password. 
 
 source("00-setup.R")

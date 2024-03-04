@@ -195,19 +195,28 @@ for(m in 1:length(sp.list)) {
   Grid2<-Grid %>% select(id, bcr_number, province)
   Grid2$id<-as.integer(Grid2$id)
   grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
-  grid_key$National<-"All"
+  grid_key$National<-"Canada"
   row.names(grid_key) <- NULL
   
-  grid_key$province[grid_key$province  == "MAINE"]  <-  "QUEBEC"
-  grid_key$province[grid_key$province  == "WASHINGTON"]  <-  "BRITISH COLUMBIA/ YUKON"
-  grid_key$province[grid_key$province  == "BRITISH COLUMBIA"]  <-  "BRITISH COLUMBIA/ YUKON"
-  grid_key$province[grid_key$province  == "YUKON"]  <-  "BRITISH COLUMBIA/ YUKON"
-  grid_key$province[grid_key$province  == "NORTHWEST TERRITORIES"]  <-  "BRITISH COLUMBIA/ YUKON"
-  grid_key$province[grid_key$province  == "MINNESOTA"]  <-  "ONTARIO"
-  grid_key$province[grid_key$province  == "MICHIGAN"]  <-  "ONTARIO"
-  grid_key$province[grid_key$province  == "NEW YORK"]  <- "QUEBEC"
-  grid_key$province[grid_key$province  == "NEW HAMPSHIRE"]  <- "QUEBEC"
-  grid_key$province[is.na(grid_key$province)]  <- "ONTARIO"
+  #rename to match the NatureCounts area_codes
+  grid_key$province[grid_key$province  == "MAINE"]  <-  "QC"
+  grid_key$province[grid_key$province  == "NEW YORK"]  <- "QC"
+  grid_key$province[grid_key$province  == "NEW HAMPSHIRE"]  <- "QC"
+  grid_key$province[grid_key$province  == "QUEBEC"]  <-  "QC"
+  grid_key$province[grid_key$province  == "WASHINGTON"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "BRITISH COLUMBIA"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "YUKON"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "NORTHWEST TERRITORIES"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "ONTARIO"]  <-  "ON"
+  grid_key$province[grid_key$province  == "MINNESOTA"]  <-  "ON"
+  grid_key$province[grid_key$province  == "MICHIGAN"]  <-  "ON"
+  grid_key$province[grid_key$province  == "NEW BRUNSWICK"]  <-  "NB"
+  grid_key$province[grid_key$province  == "NOVA SCOTIA"]  <-  "NS"
+  grid_key$province[grid_key$province  == "PRINCE EDWARD ISLAND"]  <-  "PE"
+  grid_key$province[grid_key$province  == "ALBERTA"]  <-  "AB"
+  grid_key$province[grid_key$province  == "MANITOBA"]  <-  "MB"
+  grid_key$province[grid_key$province  == "SASKATCHEWAN"]  <-  "SK"
+  grid_key$province[is.na(grid_key$province)]  <- "ON"
   
   
   ###################################################
@@ -264,7 +273,7 @@ for(m in 1:length(sp.list)) {
   #-----------------------------------------------------------
   ##Run nbinomal model. There was an issue with the ZIP model crashing
   #
-  index<-"index.nb"
+  #index<-"index.nb"
 
   #rerun the top model and save output
   out1<-try(inla(f1, family = "nbinomial", data = sp.data, #E = nstop, 
@@ -398,36 +407,40 @@ for(m in 1:length(sp.list)) {
     d3<-left_join(d3, sp.names, by=c("species_id"))
     d3$species_sci_name<-d3$scientific_name
     
+    ##LOESS SMOOTH
     if(nrow(d3)>=10){
       d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
     }else{
       d3$LOESS_index<-""
     }
     
-    d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+    ##Trend Slope 
+    d2$trend_index<-exp(d1*d2$styear + d0)
+    d3$trend_index<-d2$trend_index
     
-    write.table(d3, paste(out.dir, sp.list[m], "_Cell_Indices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+    
+#   write.table(d3, paste(out.dir, sp.list[m], "_Cell_Indices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
     write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-    
     
   } #end cell specific loop
   
-  #Calculate provinical level index of abundance from mean of the cell
+##DELETE
+#Calculate provincial level index of abundance from mean of the cell
   
-  cell_index<-read.csv(paste(out.dir, sp.list[m], "_Cell_Indices.csv", sep=""))
-  colnames(cell_index)<-colnames(d3)
-  cell_index<-left_join(cell_index, grid_key, by=c("area_code"="cell_id"))
-  cell_index<-cell_index %>% group_by(results_code, version, province, year, season, period, species_code, species_id, species_name, species_sci_name, stderr, stdev) %>% summarise(index=mean(index), upper_ci = mean(upper_ci), lower_ci = mean(lower_ci))
-  cell_index<-cell_index %>% group_by(province) %>% mutate(LOESS_index = loess_func(index, year))
-  cell_index$area_code<-cell_index$province
+# cell_index<-read.csv(paste(out.dir, sp.list[m], "_Cell_Indices.csv", sep=""))
+#  colnames(cell_index)<-colnames(d3)
+#  cell_index<-left_join(cell_index, grid_key, by=c("area_code"="cell_id"))
+#  cell_index<-cell_index %>% group_by(results_code, version, province, year, season, period, species_code, species_id, species_name, species_sci_name, stderr, stdev) %>% summarise(index=mean(index), upper_ci = mean(upper_ci), lower_ci = mean(lower_ci))
+#  cell_index<-cell_index %>% group_by(province) %>% mutate(LOESS_index = loess_func(index, year))
+#  cell_index$area_code<-cell_index$province
     
-  cell_index<-cell_index %>% ungroup() %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+#  cell_index<-cell_index %>% ungroup() %>% select(results_code, version, area_code, season, period, species_code, species_id, years, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+# write.table(cell_index, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
-  write.table(cell_index, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   
-  
-  ##-----------------------------------------------------------
-  #Explore posterior samples 
+##-----------------------------------------------------------
+#Explore posterior samples 
   
   #grid2<-grid_key %>% filter(alpha_i==cells_with_counts)
   grid2<-grid_key
@@ -439,8 +452,7 @@ for(m in 1:length(sp.list)) {
   post1 <- as.data.frame(sapply(samp1, function(x) x$latent))
   post1$par_names <- par_names
   
-  
-  #Provincial Tau
+#Provincial Tau
   #tau samples
   tau_samps1 <- post1[grep("tau_i", post1$par_names), ]
   row.names(tau_samps1) <- NULL
@@ -450,7 +462,7 @@ for(m in 1:length(sp.list)) {
   row.names(tau_samps2) <- NULL
   val_names <- grep("V", names(tau_samps2))
   
-  #tau_prov
+#tau_prov
   tau_prov <- tau_samps2 %>%
     ungroup() %>%  #this seems to be needed before the select function or it won't work
     dplyr::select(province, val_names) %>%
@@ -463,7 +475,7 @@ for(m in 1:length(sp.list)) {
               n=dplyr::n()/posterior_ss); head(tau_prov)
   tau_prov$taxa_code <- sp.list[m]
   
-  #output for SoBC. This is clunky, but clear. 
+#output for SoBC. This is clunky, but clear. 
   tau_prov$results_code<-"OWLS"
   tau_prov$version<-"2023"
   tau_prov$area_code<-tau_prov$province
@@ -495,21 +507,23 @@ for(m in 1:length(sp.list)) {
   tau_prov$prob_increase_0<-""
   tau_prov$prob_increase_33<-""
   tau_prov$prob_increase_100<-""
+  tau_prov$suitability<-""
   tau_prov$confidence<-""
   tau_prov$precision_num<-""
   tau_prov$precision_cat<-ifelse(tau_prov$iw_tau<3.5, "High", ifelse(tau_prov$iw_tau>=3.5 & tau_prov$iw_tau<=6.7, "Medium", "Low"))
   tau_prov$coverage_num<-""
   tau_prov$coverage_cat<-""
   tau_prov$sample_size<-tau_prov$n
+  tau_prov$sample_size_units<-"1x1 degree blocks"
   tau_prov$prob_LD<-""
   tau_prov$prob_MD<-""
   tau_prov$prob_LC<-""
   tau_prov$prob_MI<-""
   tau_prov$prob_LI<-""
   
-  trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+  trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
-  #some cells are assigned to wrong areas. Remove small sample size. 
+#some cells are assigned to wrong areas. Remove small sample size. 
   
   # Write data to table
   write.table(trend.csv, file = paste(out.dir,
@@ -520,8 +534,7 @@ for(m in 1:length(sp.list)) {
               sep = ",", 
               col.names = FALSE)
   
-  
-  #National tau
+#National tau
   #tau_national
   tau_nat <- tau_samps2 %>%
     ungroup() %>%  #this seems to be needed before the select function or it won't work
@@ -567,21 +580,23 @@ for(m in 1:length(sp.list)) {
   tau_nat$prob_increase_0<-""
   tau_nat$prob_increase_33<-""
   tau_nat$prob_increase_100<-""
+  tau_nat$suitability<-""
   tau_nat$confidence<-""
   tau_nat$precision_num<-""
   tau_nat$precision_cat<-ifelse(tau_nat$iw_tau<3.5, "High", ifelse(tau_nat$iw_tau>=3.5 & tau_nat$iw_tau<=6.7, "Medium", "Low"))
   tau_nat$coverage_num<-""
   tau_nat$coverage_cat<-""
   tau_nat$sample_size<-tau_nat$n
+  tau_nat$sample_size_units<-"1x1 degree blocks"
   tau_nat$prob_LD<-""
   tau_nat$prob_MD<-""
   tau_nat$prob_LC<-""
   tau_nat$prob_MI<-""
   tau_nat$prob_LI<-""
   
-  trend.csv<-tau_nat %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+  trend.csv<-tau_nat %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
-  # Write data to table
+  #Write data to table
   write.table(trend.csv, file = paste(out.dir,
                                       "NOS_TrendsSlope", ".csv", sep = ""),
               row.names = FALSE, 
@@ -590,62 +605,131 @@ for(m in 1:length(sp.list)) {
               sep = ",", 
               col.names = FALSE)
   
-  
-  #National alpha samples
-  ##___________________________________________________
-  tmp1 <- select(sp.data, species_id, survey_year, count)
+##___________________________________________________  
+#Provincial alpha samples
+
+  tmp2 <- select(sp.data, species_id, survey_year, StateProvince, count)
   
   #for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
   nyears<-(max.yr-min.yr)+1
   pred.yr<-matrix(nrow=posterior_ss, ncol=nyears)
   
+  prov.list<-unique(sp.data$StateProvince)
+  
   for (h in 1:posterior_ss){
-    tmp1$pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
-    pred.yr[h,]<-t(with(tmp1, aggregate (pred, list(survey_year), mean, na.action=na.omit))$x)
-  }
+    pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
+    tmp2[ncol(tmp2)+1]<-pred
+   }
   
+  tmp2$means<-rowMeans(tmp2[, 5:1004])
   mn.yr1<-NULL
-  mn.yr1<-matrix(nrow=nyears, ncol=4)
   
-  for(g in 1:nyears){
-    mn.yr1[g,1]<-median(pred.yr[,g], na.rm=TRUE)
-    mn.yr1[g,2]<-quantile(pred.yr[,g], 0.025, na.rm=TRUE)
-    mn.yr1[g,3]<-quantile(pred.yr[,g], 0.975, na.rm=TRUE)
-    mn.yr1[g,4]<-sd(pred.yr[,g], na.rm=TRUE)
-  }
-  
-  mn.yr1 <- as.data.frame(mn.yr1)
-  names(mn.yr1) <- c("index", "lower_ci", "upper_ci", "SD")          
-  year.list<-(unique(sp.data$survey_year))
-  mn.yr1$survey_year<-c(year.list)
-  
+##Provincial 
+  mn.yr1<-tmp2 %>% select(survey_year, StateProvince, means)
+  mn.yr1<-tmp2 %>% group_by(survey_year, StateProvince) %>% summarise(index=mean(means, na.rm=TRUE), stdev = sd(means, na.rm=TRUE), upper_ci=quantile(means, probs = 0.975), lower_ci=quantile(means, probs = 0.025))
   mn.yr1$results_code<-"OWLS"
   mn.yr1$version<-"2023"
-  mn.yr1$area_code<-"National"
+  mn.yr1$area_code<-mn.yr1$StateProvince
   mn.yr1$year<-mn.yr1$survey_year
   mn.yr1$season<-"Breeding"
   mn.yr1$period<-"all years"
   mn.yr1$species_code<-""
-  mn.yr1$index<-mn.yr1$index
   mn.yr1$stderr<-""
-  mn.yr1$stdev<-mn.yr1$SD
-  mn.yr1$upper_ci<-mn.yr1$upper_ci
-  mn.yr1$lower_ci<-mn.yr1$lower_ci
   mn.yr1$species_name<-sp
   mn.yr1$species_id<-sp.id
   
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
   mn.yr1$species_sci_name<-mn.yr1$scientific_name
   
+  #LOESS_index
   if(nrow(mn.yr1)>=10){
-    mn.yr1 <- mn.yr1 %>% mutate(LOESS_index = loess_func(index, year))
+    mn.yr1 <- mn.yr1 %>% group_by(area_code) %>% mutate(LOESS_index = loess_func(index, year))
   }else{
     mn.yr1$LOESS_index<-""
   }
   
-  mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+  #trend_index
+  alpha_samps1 <- post1[grep("alpha_i", post1$par_names), ]
+  row.names(alpha_samps1) <- NULL
+  alpha_samps1 <- alpha_samps1[cells_with_counts, 1:posterior_ss]
+  alpha_samps2 <- cbind(grid2, alpha_samps1)
+  row.names(alpha_samps2) <- NULL
+  val_names <- grep("V", names(alpha_samps2))
   
+  #median alpha_prov
+  alpha_prov <- alpha_samps2 %>%
+    ungroup() %>%  #this seems to be needed before the select function or it won't work
+    dplyr::select(province, val_names) %>%
+    mutate(province=factor(province)) %>%
+    gather(key=key, val=val, -province) %>%
+    dplyr::select(-key) %>%
+    group_by(province) %>%
+    summarise(med_alpha=median(val))
+  
+  #join with trends
+  tau_prov2<-tau_prov %>% select(province, med_tau)
+  trend.index<-full_join(alpha_prov, tau_prov2, by="province")
+  
+  mn.yr1<-left_join(mn.yr1, trend.index, by=c("area_code" = "province"))
+  mn.yr1<-mn.yr1 %>% mutate(styear = year-max.yr, lg_tau = log((med_tau/100)+1))
+  mn.yr1$trend_index<-exp(mn.yr1$lg_tau*mn.yr1$styear + mn.yr1$med_alpha)
+  
+  mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
   write.table(mn.yr1, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
+  
+##National alpha samples
+##___________________________________________________
+
+  mn.yr1<-NULL
+  mn.yr1<-tmp2 %>% select(survey_year, StateProvince, means)
+  mn.yr1<-tmp2 %>% group_by(survey_year) %>% summarise(index=mean(means, na.rm=TRUE), stdev = sd(means, na.rm=TRUE), upper_ci=quantile(means, probs = 0.975), lower_ci=quantile(means, probs = 0.025))
+  mn.yr1$results_code<-"OWLS"
+  mn.yr1$version<-"2023"
+  mn.yr1$area_code<-"Canada"
+  mn.yr1$year<-mn.yr1$survey_year
+  mn.yr1$season<-"Breeding"
+  mn.yr1$period<-"all years"
+  mn.yr1$species_code<-""
+  mn.yr1$stderr<-""
+  mn.yr1$species_name<-sp
+  mn.yr1$species_id<-sp.id
+  
+  mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
+  mn.yr1$species_sci_name<-mn.yr1$scientific_name
+  
+    if(nrow(mn.yr1)>=10){
+      mn.yr1 <- mn.yr1 %>% mutate(LOESS_index = loess_func(index, year))
+    }else{
+    mn.yr1$LOESS_index<-""
+    }
+ 
+   #trend_index
+  
+  #alpha_nat
+  alpha_nat <- alpha_samps2 %>%
+    ungroup() %>%  #this seems to be needed before the select function or it won't work
+    dplyr::select(National, val_names) %>%
+    mutate(National=factor(National)) %>%
+    gather(key=key, val=val, -National) %>%
+    dplyr::select(-key) %>%
+    group_by(National) %>%
+    summarise(med_alpha=median(val))
+  
+  #join with trends
+  tau_nat2<-tau_nat %>% select(med_tau)
+  trend.index<-cbind(alpha_nat, tau_nat2)
+  
+  mn.yr1$med_alpha<-trend.index$med_alpha
+  mn.yr1$lg_tau<-log((trend.index$med_tau/100)+1)
+  mn.yr1<-mn.yr1 %>% mutate(styear = year-max.yr)
+  mn.yr1$trend_index<-exp(mn.yr1$lg_tau*mn.yr1$styear + mn.yr1$med_alpha)
+  
+  mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+  write.table(mn.yr1, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
+  
+  
+  ##-----------------------------------------------------------
+  #Collect posterior summaries into one data frame
   
   alpha_samps1 <- post1[grep("alpha_i", post1$par_names), ]
   row.names(alpha_samps1) <- NULL
@@ -680,10 +764,6 @@ for(m in 1:length(sp.list)) {
               ucl_alpha=quantile(val, probs=0.975), iw_alpha=ucl_alpha-lcl_alpha,
               n=dplyr::n()/posterior_ss); head(alpha_nat)
   alpha_prov$taxa_code <- sp.list[m]
-  
-  
-  ##-----------------------------------------------------------
-  #Collect posterior summaries into one data frame
   
   post_sum<-NULL
   post_sum <- data.frame(alpha_i=cells_with_counts,
@@ -733,19 +813,21 @@ for(m in 1:length(sp.list)) {
   tau_cell$prob_increase_0<-""
   tau_cell$prob_increase_33<-""
   tau_cell$prob_increase_100<-""
+  tau_cell$suitability<-""
   tau_cell$confidence<-""
   tau_cell$precision_num<-""
   tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
   tau_cell$coverage_num<-""
   tau_cell$coverage_cat<-""
   tau_cell$sample_size<-""
+  tau_cell$sample_size_units<-""
   tau_cell$prob_LD<-""
   tau_cell$prob_MD<-""
   tau_cell$prob_LC<-""
   tau_cell$prob_MI<-""
   tau_cell$prob_LI<-""
   
-  trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+  trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
   # Write data to table
   write.table(trend.csv, file = paste(out.dir,
