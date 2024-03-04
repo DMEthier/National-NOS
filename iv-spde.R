@@ -442,19 +442,21 @@ for(m in 1:length(sp.list)) {
     tau_route$prob_increase_0<-""
     tau_route$prob_increase_33<-""
     tau_route$prob_increase_100<-""
+    tau_route$suitability<-""
     tau_route$confidence<-""
     tau_route$precision_num<-""
     tau_route$precision_cat<-ifelse(tau_route$tau_wi<3.5, "High", ifelse(tau_route$tau_wi>=3.5 & tau_route$tau_wi<=6.7, "Medium", "Low"))
     tau_route$coverage_num<-""
     tau_route$coverage_cat<-""
     tau_route$sample_size<-""
+    tau_route$sample_size_units<-""
     tau_route$prob_LD<-""
     tau_route$prob_MD<-""
     tau_route$prob_LC<-""
     tau_route$prob_MI<-""
     tau_route$prob_LI<-""
     
-    trend.csv<-tau_route %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+    trend.csv<-tau_route %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
     
     # Write data to table
     write.table(trend.csv, file = paste(out.dir, 
@@ -575,14 +577,18 @@ for(m in 1:length(sp.list)) {
       d3$species_name<-d3$species_code
       d3$species_code<-""
       
-      
+      ##Trend LOESS_index
       if(nrow(d3)>=10){
         d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
       }else{
         d3$LOESS_index<-""
       }
       
-      d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+      ##Trend_Index 
+      d2$trend_index<-exp(d1*d2$styear + d0)
+      d3$trend_index<-d2$trend_index
+      
+      d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
       
       write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
       
