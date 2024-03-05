@@ -12,7 +12,7 @@ trnd<- left_join(trnd, sp.name, by="species_id")
 trnd <- trnd %>% drop_na(results_code)
 
 trnd <- trnd %>% select(species_id, area_code, english_name, french_name, trnd, lower_ci, upper_ci) %>%
-  mutate(sp.trnd = paste(english_name, "/", " \n", french_name, "\n ", ": ", round(trnd, digits = 2),  
+  mutate(sp.trnd = paste(english_name, "/", " \n", french_name, "\n ", round(trnd, digits = 2),  
                                  " (", round(lower_ci, digits = 2), ", ",
                                  round(upper_ci, digits = 2), ")"))
 trnd<-trnd %>% select(-trnd, -lower_ci, -upper_ci)
@@ -23,17 +23,17 @@ index <- read.csv(paste("output/NOS_AnnualIndices.csv"))
 index<- left_join(index, sp.name, by="species_id")
 
 index <- index %>%
-  filter(!is.na(results_code)) %>% dplyr::select(index, lower_ci, upper_ci, LOESS_index,
-                species_code, year, area_code, species_id,  
+  filter(!is.na(results_code)) %>% dplyr::select(index, lower_ci, upper_ci, LOESS_index, trend_index, 
+                species_code, year, area_code, species_id,
                 english_name, french_name)
 
+plot.dat<-NULL
 plot.dat <- full_join(index, trnd, by = c("area_code", "species_id", "english_name", "french_name"), multiple="all")
-#plot.dat <-plot.dat %>% filter(area_code %in% c("National", "BRITISH COLUMBIA/YUKON", "ALBERTA", "SASKATCHEWAN", "MANITOBA", "ONTARIO", "QUEBEC", "NOVA SCOTIA", "NEW BRUNSWICK", "PRINCE EDWARD ISLAND"))
-plot.dat <-plot.dat %>% filter(area_code %in% c("National"))
 
+plot.dat <-plot.dat %>% filter(area_code %in% c("ON"))
 
 ggplot(data = plot.dat, aes(x = as.numeric(year), y = index)) +
-    facet_wrap(~ english_name, ncol = 2, scales = "free", as.table = TRUE) +
+    facet_wrap(~ sp.trnd, ncol = 2, scales = "free", as.table = TRUE) +
     geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci)) +
     geom_smooth(aes(ymin = lower_ci, ymax = upper_ci), method = "loess", alpha = 0.1) + 
     xlab("Year") +
@@ -45,4 +45,3 @@ ggplot(data = plot.dat, aes(x = as.numeric(year), y = index)) +
     theme(text=element_text(size=20))+
     theme_classic()
   
-}
