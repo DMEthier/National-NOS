@@ -159,6 +159,7 @@ for(m in 1:length(sp.list)) {
   year.summ <- cast(year.summ, StateProvince ~ variable,	fun.aggregate="sum")
   year.summ$mean<-year.summ$ObservationCount/(max.yr-min.yr)
   yr.sp.list <- unique(subset(year.summ, select = c("StateProvince"), ObservationCount >= 10))
+  yr.sp.list$Species<-sp.list[m]
   write.table(yr.sp.list, paste(out.dir, sp.list[m], "_ProvinceSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
   
   #yr.summ <- melt(sp.data, id.var = "survey_year",	measure.var = "ObservationCount")

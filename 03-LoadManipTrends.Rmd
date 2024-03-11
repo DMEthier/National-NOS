@@ -49,7 +49,6 @@ Create the output tables. This only needs to be done once per provincal analysis
 ```{r data manip}
 
 source("i-output.R") #Total count period output tables
-
 source("i-output2.R") #Silent listening period output tables
 
 ```
@@ -60,7 +59,6 @@ source("i-output2.R") #Silent listening period output tables
 ```{r data manip}
 
 source("ii-datamanip.R") #Total count period
-
 source("ii-datamanip2.R") #Silent listening period
 
 ```
@@ -94,10 +92,53 @@ source("v_plots.R")
 
 ```
 
-## Stitch together outputs for Catherine
+## Plot Sum Stats and Visuals
 
 ```{r final outputs}
 
+library(sf)
+library(mapview)
+library(ggmap) 
+library(mapproj)
+register_stadiamaps("1cdeb586-3f5a-4ef9-813b-02375efa9f21") 
 
+##Plot all locations
+loc <- read.csv("output/AllEventsNOS.csv")
+loc<-loc %>% select(RouteIdentifier, latitude, longitude, survey_year) %>% distinct()
+
+min.yr<-2008
+max.yr<-2021
+
+loc<-loc %>% filter(survey_year>=min.yr & survey_year<=max.yr)
+test<-loc %>% select(RouteIdentifier) %>% distinct()
+
+#View Data
+sf<-st_as_sf(loc, coords = c("longitude", "latitude"), crs = 4326)
+mapview(sf, map.types = "Esri.WorldImagery")
+
+#Routes with more than 10 years of data
+loc2<-loc %>% group_by(RouteIdentifier, latitude, longitude) %>% summarise(n=n_distinct(survey_year))
+loc2<-loc2 %>% filter(n>=10)
+
+#View Data
+sf2<-st_as_sf(loc2, coords = c("longitude", "latitude"), crs = 4326)
+mapview(sf2, map.types = "Esri.WorldImagery")
+
+
+#compile the province year summaries
+
+##Combine data outputs into a single table for data processing
+
+prov_sum <- list.files(path = "C:/Users/dethier/Documents/ethier-scripts/National-NOS/output/",  # Identify all CSV files
+                     pattern = "*ProvinceSummary.csv", full.names = TRUE) %>% 
+  lapply(read_csv) %>%           # Store all files in list
+  bind_rows                      # Combine data sets into one data set 
+
+n<-nrow(prov_sum)
+prov_sum<-prov_sum[2:n,]
+prov_sum<-na.omit(prov_sum)
+prov_sum$value<-1
+prov_sum<-cast(prov_sum, StateProvince ~ Species)
+write.csv(prov_sum, "output/AllProvinceSummaryNOS.csv")
 
 ```

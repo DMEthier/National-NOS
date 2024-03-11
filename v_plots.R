@@ -30,7 +30,7 @@ index <- index %>%
 plot.dat<-NULL
 plot.dat <- full_join(index, trnd, by = c("area_code", "species_id", "english_name", "french_name"), multiple="all")
 
-plot.dat <-plot.dat %>% filter(area_code %in% c("ON"))
+plot.dat <-plot.dat %>% filter(area_code %in% c("ON")) %>% filter(species_id != 7610)
 
 ggplot(data = plot.dat, aes(x = as.numeric(year), y = index)) +
     facet_wrap(~ sp.trnd, ncol = 2, scales = "free", as.table = TRUE) +
