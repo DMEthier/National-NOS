@@ -390,20 +390,21 @@ for(m in 1:length(sp.list)) {
     d3<-merge(d3, l3, by=c("cell_id", "year"))
     d3<-merge(d3, u3, by=c("cell_id", "year"))
     
-    d3$results_code<-"OWLS"
-    d3$version<-"2023"
-    d3$area_code<-d3$cell_id
-    d3$year<-d3$year
-    d3$season<-"Breeding"
-    d3$period<-"all years"
-    d3$species_code<-""
-    d3$index<-d3$abund
-    d3$stderr<-""
-    d3$stdev<-""
-    d3$upper_ci<-d3$abund_uci
-    d3$lower_ci<-d3$abund_lci
-    d3$species_name<-d3$taxa_code
-    d3$species_id<-sp.id
+    d3 <-d3 %>% mutate(
+      results_code<-"OWLS", 
+   version<-"2023",
+   area_code<-d3$cell_id,
+   year<-d3$year,
+   season<-"Breeding",
+   period<-"all years",
+   species_code<-"",
+   index<-d3$abund,
+   stderr<-"",
+   stdev<-"",
+   upper_ci<-d3$abund_uci,
+   lower_ci<-d3$abund_lci,
+   species_name<-d3$taxa_code,
+   species_id<-sp.id)
     
     d3<-left_join(d3, sp.names, by=c("species_id"))
     d3$species_sci_name<-d3$scientific_name
@@ -432,7 +433,7 @@ for(m in 1:length(sp.list)) {
   #grid2<-grid_key %>% filter(alpha_i==cells_with_counts)
   grid2<-grid_key
   
-  #posterior sample 
+#posterior sample 
   posterior_ss <- 1000 # change as appropriate
   samp1 <- inla.posterior.sample(posterior_ss, out1, num.threads=3)
   par_names <- as.character(attr(samp1[[1]]$latent, "dimnames")[[1]])
@@ -463,50 +464,49 @@ for(m in 1:length(sp.list)) {
   tau_prov$taxa_code <- sp.list[m]
   
 #output for SoBC. This is clunky, but clear. 
-  tau_prov$results_code<-"OWLS"
-  tau_prov$version<-"2023"
-  tau_prov$area_code<-tau_prov$province
-  tau_prov$species_code<-""
-  tau_prov$species_id<-sp.id
-  tau_prov$season<-"Breeding"
-  tau_prov$period<-"all years"
-  tau_prov$years<-paste(min.yr, "-", max.yr, sep="")
-  tau_prov$year_start<-min.yr
-  tau_prov$year_end<-max.yr
-  tau_prov$trnd<-tau_prov$med_tau
-  tau_prov$index_type<-""
-  tau_prov$upper_ci<-tau_prov$ucl_tau
-  tau_prov$lower_ci<-tau_prov$lcl_tau
-  tau_prov$stderr<-""
-  tau_prov$model_type<-"iCAR Slope"
-  tau_prov$model_fit<-""
-  
-  tau_prov$per<-max.yr-min.yr
-  tau_prov$per_trend<-tau_prov$med_tau/100
-  tau_prov$percent_change<-((1+tau_prov$per_trend)^tau_prov$per-1)*100
-  
-  tau_prov$percent_change_low<-""
-  tau_prov$percent_change_high<-""
-  tau_prov$prob_decrease_0<-""
-  tau_prov$prob_decrease_25<-""
-  tau_prov$prob_decrease_30<-""
-  tau_prov$prob_decrease_50<-""
-  tau_prov$prob_increase_0<-""
-  tau_prov$prob_increase_33<-""
-  tau_prov$prob_increase_100<-""
-  tau_prov$suitability<-""
-  tau_prov$confidence<-""
-  tau_prov$precision_num<-""
-  tau_prov$precision_cat<-ifelse(tau_prov$iw_tau<3.5, "High", ifelse(tau_prov$iw_tau>=3.5 & tau_prov$iw_tau<=6.7, "Medium", "Low"))
-  tau_prov$coverage_num<-""
-  tau_prov$coverage_cat<-""
-  tau_prov$sample_size<-tau_prov$n
-  tau_prov$sample_size_units<-"1x1 degree blocks"
-  tau_prov$prob_LD<-""
-  tau_prov$prob_MD<-""
-  tau_prov$prob_LC<-""
-  tau_prov$prob_MI<-""
-  tau_prov$prob_LI<-""
+  tau_prov <- tau_proc %>% mutate( 
+  results_code="OWLS",
+  version="2023",
+  area_code=tau_prv$province,
+  species_code="",
+  species_id=sp.id,
+  season="Breeding",
+  period="all years",
+  years=paste(min.yr, "-", max.yr, sep=""),
+  year_start=min.yr,
+  year_end=max.yr,
+  trnd=tau_prov$med_tau,
+  index_type="",
+  upper_ci=tau_prov$ucl_tau,
+  lower_ci=tau_prov$lcl_tau,
+  stderr="",
+  model_type="iCAR Slope",
+  model_fit="",
+  per=max.yr-min.yr,
+  per_trend=tau_prov$med_tau/100,
+  percent_change=((1+tau_prov$per_trend)^tau_prov$per-1)*100,
+  percent_change_low="",
+  percent_change_high="",
+  prob_decrease_0="",
+  prob_decrease_25="",
+  prob_decrease_30="",
+  prob_decrease_50="",
+  prob_increase_0="",
+  prob_increase_33="",
+  prob_increase_100="",
+  suitability="",
+  confidence="",
+  precision_num="",
+  precision_cat=ifelse(tau_prov$iw_tau<3.5, "High", ifelse(tau_prov$iw_tau>=3.5 & tau_prov$iw_tau<=6.7, "Medium", "Low")),
+  coverage_num="",
+  coverage_cat="",
+  sample_size=tau_prov$n,
+  sample_size_units="1x1 degree blocks",
+  prob_LD="",
+  prob_MD="",
+  prob_LC="",
+  prob_MI="",
+  prob_LI="")
   
   trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
@@ -536,50 +536,49 @@ for(m in 1:length(sp.list)) {
   tau_nat$taxa_code <- sp.list[m]
   
   #output for SoBC. This is clunky, but clear. 
-  tau_nat$results_code<-"OWLS"
-  tau_nat$version<-"2023"
-  tau_nat$area_code<-"Canada"
-  tau_nat$species_code<-""
-  tau_nat$species_id<-sp.id
-  tau_nat$season<-"Breeding"
-  tau_nat$period<-"all years"
-  tau_nat$years<-paste(min.yr, "-", max.yr, sep="")
-  tau_nat$year_start<-min.yr
-  tau_nat$year_end<-max.yr
-  tau_nat$trnd<-tau_nat$med_tau
-  tau_nat$index_type<-""
-  tau_nat$upper_ci<-tau_nat$ucl_tau
-  tau_nat$lower_ci<-tau_nat$lcl_tau
-  tau_nat$stderr<-""
-  tau_nat$model_type<-"iCAR Slope"
-  tau_nat$model_fit<-""
-  
-  tau_nat$per<-max.yr-min.yr
-  tau_nat$per_trend<-tau_nat$med_tau/100
-  tau_nat$percent_change<-((1+tau_nat$per_trend)^tau_nat$per-1)*100
-  
-  tau_nat$percent_change_low<-""
-  tau_nat$percent_change_high<-""
-  tau_nat$prob_decrease_0<-""
-  tau_nat$prob_decrease_25<-""
-  tau_nat$prob_decrease_30<-""
-  tau_nat$prob_decrease_50<-""
-  tau_nat$prob_increase_0<-""
-  tau_nat$prob_increase_33<-""
-  tau_nat$prob_increase_100<-""
-  tau_nat$suitability<-""
-  tau_nat$confidence<-""
-  tau_nat$precision_num<-""
-  tau_nat$precision_cat<-ifelse(tau_nat$iw_tau<3.5, "High", ifelse(tau_nat$iw_tau>=3.5 & tau_nat$iw_tau<=6.7, "Medium", "Low"))
-  tau_nat$coverage_num<-""
-  tau_nat$coverage_cat<-""
-  tau_nat$sample_size<-tau_nat$n
-  tau_nat$sample_size_units<-"1x1 degree blocks"
-  tau_nat$prob_LD<-""
-  tau_nat$prob_MD<-""
-  tau_nat$prob_LC<-""
-  tau_nat$prob_MI<-""
-  tau_nat$prob_LI<-""
+  tau_nat<-tau_nat %>%  mutate(
+    results_code="OWLS",
+  version="2023",
+  area_code="Canada",
+  species_code="",
+  species_id=sp.id,
+  season="Breeding",
+  period="all years",
+  years=paste(min.yr, "-", max.yr, sep=""),
+  year_start=min.yr,
+  year_end=max.yr,
+  trnd=tau_nat$med_tau,
+  index_type="",
+  upper_ci=tau_nat$ucl_tau,
+  lower_ci=tau_nat$lcl_tau,
+  stderr="",
+  model_type="iCAR Slope",
+  model_fit="",
+  per=max.yr-min.yr,
+  per_trend=tau_nat$med_tau/100,
+  percent_change=((1+tau_nat$per_trend)^tau_nat$per-1)*100,
+  percent_change_low="",
+  percent_change_high="",
+  prob_decrease_0="",
+  prob_decrease_25="",
+  prob_decrease_30="",
+  prob_decrease_50="",
+  prob_increase_0="",
+  prob_increase_33="",
+  prob_increase_100="",
+  suitability="",
+  confidence="",
+  precision_num="",
+  precision_cat=ifelse(tau_nat$iw_tau<3.5, "High", ifelse(tau_nat$iw_tau>=3.5 & tau_nat$iw_tau<=6.7, "Medium", "Low")),
+  coverage_num="",
+  coverage_cat="",
+  sample_size=tau_nat$n,
+  sample_size_units="1x1 degree blocks",
+  prob_LD="",
+  prob_MD="",
+  prob_LC="",
+  prob_MI="",
+  prob_LI="")
   
   trend.csv<-tau_nat %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
@@ -595,6 +594,7 @@ for(m in 1:length(sp.list)) {
 ##___________________________________________________  
 #Provincial alpha samples
 
+  tmp2<-NULL
   tmp2 <- select(sp.data, species_id, survey_year, StateProvince, count)
   
   #for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
@@ -607,23 +607,22 @@ for(m in 1:length(sp.list)) {
     pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
     tmp2[ncol(tmp2)+1]<-pred
    }
+
+  tmp1<-tmp2 %>% group_by(survey_year, StateProvince) %>% summarise_all(mean, na.rm=TRUE)
+  tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
   
-  tmp2$means<-rowMeans(tmp2[, 5:1004])
   mn.yr1<-NULL
-  
+  mn.yr1<-tmp1 %>% select(survey_year, StateProvince, index, lower_ci, upper_ci, stdev) %>% mutate(
 ##Provincial 
-  mn.yr1<-tmp2 %>% select(survey_year, StateProvince, means)
-  mn.yr1<-tmp2 %>% group_by(survey_year, StateProvince) %>% summarise(index=mean(means, na.rm=TRUE), stdev = sd(means, na.rm=TRUE), upper_ci=quantile(means, probs = 0.975), lower_ci=quantile(means, probs = 0.025))
-  mn.yr1$results_code<-"OWLS"
-  mn.yr1$version<-"2023"
-  mn.yr1$area_code<-mn.yr1$StateProvince
-  mn.yr1$year<-mn.yr1$survey_year
-  mn.yr1$season<-"Breeding"
-  mn.yr1$period<-"all years"
-  mn.yr1$species_code<-""
-  mn.yr1$stderr<-""
-  mn.yr1$species_name<-sp
-  mn.yr1$species_id<-sp.id
+  version="2023",
+  area_code=mn.yr1$StateProvince,
+  year=mn.yr1$survey_year,
+  season="Breeding",
+  period="all years",
+  species_code="",
+  stderr="",
+  species_name=sp,
+  species_id=sp.id)
   
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
   mn.yr1$species_sci_name<-mn.yr1$scientific_name
@@ -674,18 +673,20 @@ for(m in 1:length(sp.list)) {
 ##___________________________________________________
 
   mn.yr1<-NULL
-  mn.yr1<-tmp2 %>% select(survey_year, StateProvince, means)
-  mn.yr1<-tmp2 %>% group_by(survey_year) %>% summarise(index=mean(means, na.rm=TRUE), stdev = sd(means, na.rm=TRUE), upper_ci=quantile(means, probs = 0.975), lower_ci=quantile(means, probs = 0.025))
-  mn.yr1$results_code<-"OWLS"
-  mn.yr1$version<-"2023"
-  mn.yr1$area_code<-"Canada"
-  mn.yr1$year<-mn.yr1$survey_year
-  mn.yr1$season<-"Breeding"
-  mn.yr1$period<-"all years"
-  mn.yr1$species_code<-""
-  mn.yr1$stderr<-""
-  mn.yr1$species_name<-sp
-  mn.yr1$species_id<-sp.id
+  tmp1<-NULL
+  tmp1<-tmp2 %>% select(-StateProvince) %>%  group_by(survey_year) %>% summarise_all(mean, na.rm=TRUE)
+  tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
+  mn.yr1 <-tmp1 %>% select(survey_year, index, lower_ci, upper_ci, stdev) %>% mutate(
+    results_code="OWLS",
+  version="2023",
+  area_code="Canada",
+  year=mn.yr1$survey_year,
+  season="Breeding",
+  period="all years",
+  species_code="",
+  stderr="",
+  species_name=sp,
+  species_id=sp.id)
   
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
   mn.yr1$species_sci_name<-mn.yr1$scientific_name
@@ -778,51 +779,49 @@ for(m in 1:length(sp.list)) {
   post_sum$taxa_code<-sp
   
   #output for SoBC. This is clunky, but clear. 
-  tau_cell<-post_sum
-  tau_cell$results_code<-"OWLS"
-  tau_cell$version<-"2023"
-  tau_cell$area_code<-tau_cell$cell_id
-  tau_cell$species_code<-""
-  tau_cell$species_id<-sp.id
-  tau_cell$season<-"Breeding"
-  tau_cell$period<-"all years"
-  tau_cell$years<-paste(min.yr, "-", max.yr, sep="")
-  tau_cell$year_start<-min.yr
-  tau_cell$year_end<-max.yr
-  tau_cell$trnd<-tau_cell$tau
-  tau_cell$index_type<-""
-  tau_cell$upper_ci<-tau_cell$tau_ul
-  tau_cell$lower_ci<-tau_cell$tau_ll
-  tau_cell$stderr<-""
-  tau_cell$model_type<-"iCAR Slope"
-  tau_cell$model_fit<-""
-  
-  tau_cell$per<-max.yr-min.yr
-  tau_cell$per_trend<-tau_cell$tau/100
-  tau_cell$percent_change<-((1+tau_cell$per_trend)^tau_cell$per-1)*100
-  
-  tau_cell$percent_change_low<-""
-  tau_cell$percent_change_high<-""
-  tau_cell$prob_decrease_0<-""
-  tau_cell$prob_decrease_25<-""
-  tau_cell$prob_decrease_30<-""
-  tau_cell$prob_decrease_50<-""
-  tau_cell$prob_increase_0<-""
-  tau_cell$prob_increase_33<-""
-  tau_cell$prob_increase_100<-""
-  tau_cell$suitability<-""
-  tau_cell$confidence<-""
-  tau_cell$precision_num<-""
-  tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
-  tau_cell$coverage_num<-""
-  tau_cell$coverage_cat<-""
-  tau_cell$sample_size<-""
-  tau_cell$sample_size_units<-""
-  tau_cell$prob_LD<-""
-  tau_cell$prob_MD<-""
-  tau_cell$prob_LC<-""
-  tau_cell$prob_MI<-""
-  tau_cell$prob_LI<-""
+  tau_cell<-post_sum %>% mutate(
+  results_code="OWLS",
+  version="2023",
+  area_code=cell_id,
+  species_code="",
+  species_id=sp.id,
+  season="Breeding",
+  period="all years",
+  years=paste(min.yr, "-", max.yr, sep=""),
+  year_start=min.yr,
+  year_end=max.yr,
+  trnd=tau_cell$tau,
+  index_type="",
+  upper_ci=tau_cell$tau_ul,
+  lower_ci=tau_cell$tau_ll,
+  stderr="",
+  model_type="iCAR Slope",
+  model_fit="",
+  per=max.yr-min.yr,
+  per_trend=tau_cell$tau/100,
+  percent_change=((1+tau_cell$per_trend)^tau_cell$per-1)*100,
+  percent_change_low="",
+  percent_change_high="",
+  prob_decrease_0="",
+  prob_decrease_25="",
+  prob_decrease_30="",
+  prob_decrease_50="",
+  prob_increase_0="",
+  prob_increase_33="",
+  prob_increase_100="",
+  suitability="",
+  confidence="",
+  precision_num="",
+  precision_cat=ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low")),
+  coverage_num="",
+  coverage_cat="",
+  sample_size="",
+  sample_size_units="",
+  prob_LD="",
+  prob_MD="",
+  prob_LC="",
+  prob_MI="",
+  prob_LI="")
   
   trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
