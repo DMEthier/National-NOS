@@ -391,20 +391,20 @@ for(m in 1:length(sp.list)) {
     d3<-merge(d3, u3, by=c("cell_id", "year"))
     
     d3 <-d3 %>% mutate(
-      results_code<-"OWLS", 
-   version<-"2023",
-   area_code<-d3$cell_id,
-   year<-d3$year,
-   season<-"Breeding",
-   period<-"all years",
-   species_code<-"",
-   index<-d3$abund,
-   stderr<-"",
-   stdev<-"",
-   upper_ci<-d3$abund_uci,
-   lower_ci<-d3$abund_lci,
-   species_name<-d3$taxa_code,
-   species_id<-sp.id)
+      results_code="OWLS", 
+   version="2023",
+   area_code=d3$cell_id,
+   year=d3$year,
+   season="Breeding",
+   period="all years",
+   species_code="",
+   index=d3$abund,
+   stderr="",
+   stdev="",
+   upper_ci=d3$abund_uci,
+   lower_ci=d3$abund_lci,
+   species_name=d3$taxa_code,
+   species_id=sp.id)
     
     d3<-left_join(d3, sp.names, by=c("species_id"))
     d3$species_sci_name<-d3$scientific_name
@@ -464,10 +464,10 @@ for(m in 1:length(sp.list)) {
   tau_prov$taxa_code <- sp.list[m]
   
 #output for SoBC. This is clunky, but clear. 
-  tau_prov <- tau_proc %>% mutate( 
+  tau_prov <- tau_prov %>% mutate( 
   results_code="OWLS",
   version="2023",
-  area_code=tau_prv$province,
+  area_code=tau_prov$province,
   species_code="",
   species_id=sp.id,
   season="Breeding",
@@ -482,9 +482,6 @@ for(m in 1:length(sp.list)) {
   stderr="",
   model_type="iCAR Slope",
   model_fit="",
-  per=max.yr-min.yr,
-  per_trend=tau_prov$med_tau/100,
-  percent_change=((1+tau_prov$per_trend)^tau_prov$per-1)*100,
   percent_change_low="",
   percent_change_high="",
   prob_decrease_0="",
@@ -507,6 +504,10 @@ for(m in 1:length(sp.list)) {
   prob_LC="",
   prob_MI="",
   prob_LI="")
+  
+  tau_prov$per<-max.yr-min.yr
+  tau_prov$per_trend=tau_prov$med_tau/100
+  tau_prov$percent_change=((1+tau_prov$per_trend)^tau_prov$per-1)*100
   
   trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
@@ -554,9 +555,6 @@ for(m in 1:length(sp.list)) {
   stderr="",
   model_type="iCAR Slope",
   model_fit="",
-  per=max.yr-min.yr,
-  per_trend=tau_nat$med_tau/100,
-  percent_change=((1+tau_nat$per_trend)^tau_nat$per-1)*100,
   percent_change_low="",
   percent_change_high="",
   prob_decrease_0="",
@@ -579,6 +577,10 @@ for(m in 1:length(sp.list)) {
   prob_LC="",
   prob_MI="",
   prob_LI="")
+  
+  tau_nat$per=max.yr-min.yr
+  tau_nat$per_trend=tau_nat$med_tau/100
+  tau_nat$percent_change=((1+tau_nat$per_trend)^tau_nat$per-1)*100
   
   trend.csv<-tau_nat %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   
@@ -614,15 +616,17 @@ for(m in 1:length(sp.list)) {
   mn.yr1<-NULL
   mn.yr1<-tmp1 %>% select(survey_year, StateProvince, index, lower_ci, upper_ci, stdev) %>% mutate(
 ##Provincial 
+  results_code="OWLS",
   version="2023",
-  area_code=mn.yr1$StateProvince,
-  year=mn.yr1$survey_year,
   season="Breeding",
   period="all years",
   species_code="",
   stderr="",
   species_name=sp,
   species_id=sp.id)
+  
+  mn.yr1$area_code<-mn.yr1$StateProvince
+  mn.yr1$year=mn.yr1$survey_year
   
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
   mn.yr1$species_sci_name<-mn.yr1$scientific_name
@@ -677,10 +681,8 @@ for(m in 1:length(sp.list)) {
   tmp1<-tmp2 %>% select(-StateProvince) %>%  group_by(survey_year) %>% summarise_all(mean, na.rm=TRUE)
   tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
   mn.yr1 <-tmp1 %>% select(survey_year, index, lower_ci, upper_ci, stdev) %>% mutate(
-    results_code="OWLS",
+  results_code="OWLS",
   version="2023",
-  area_code="Canada",
-  year=mn.yr1$survey_year,
   season="Breeding",
   period="all years",
   species_code="",
@@ -688,11 +690,15 @@ for(m in 1:length(sp.list)) {
   species_name=sp,
   species_id=sp.id)
   
+  mn.yr1$area_code<-"Canada"
+  mn.yr1$year<-mn.yr1$survey_year
+  
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
   mn.yr1$species_sci_name<-mn.yr1$scientific_name
   
     if(nrow(mn.yr1)>=10){
-      mn.yr1 <- mn.yr1 %>% mutate(LOESS_index = loess_func(index, year))
+      #mn.yr1 <- mn.yr1 %>% mutate(LOESS_index = loess_func(index, year))
+      mn.yr1$LOESS_index = loess_func(mn.yr1$index, mn.yr1$year)
     }else{
     mn.yr1$LOESS_index<-""
     }
@@ -790,16 +796,10 @@ for(m in 1:length(sp.list)) {
   years=paste(min.yr, "-", max.yr, sep=""),
   year_start=min.yr,
   year_end=max.yr,
-  trnd=tau_cell$tau,
   index_type="",
-  upper_ci=tau_cell$tau_ul,
-  lower_ci=tau_cell$tau_ll,
   stderr="",
   model_type="iCAR Slope",
   model_fit="",
-  per=max.yr-min.yr,
-  per_trend=tau_cell$tau/100,
-  percent_change=((1+tau_cell$per_trend)^tau_cell$per-1)*100,
   percent_change_low="",
   percent_change_high="",
   prob_decrease_0="",
@@ -812,7 +812,6 @@ for(m in 1:length(sp.list)) {
   suitability="",
   confidence="",
   precision_num="",
-  precision_cat=ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low")),
   coverage_num="",
   coverage_cat="",
   sample_size="",
@@ -822,6 +821,14 @@ for(m in 1:length(sp.list)) {
   prob_LC="",
   prob_MI="",
   prob_LI="")
+  
+  tau_cell$trnd<-tau_cell$tau
+  tau_cell$upper_ci<-tau_cell$tau_ul
+  tau_cell$lower_ci<-tau_cell$tau_ll
+  tau_cell$per<-max.yr-min.yr
+  tau_cell$per_trend<-tau_cell$tau/100
+  tau_cell$percent_change=((1+tau_cell$per_trend)^tau_cell$per-1)*100
+  tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
   
   trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
   

@@ -14,7 +14,7 @@ ID<- "dethier" #change this to your user ID. You will be prompted for a password
 
 source("00-setup.R")
 
-collections<-unique(anal.param$collection)
+collection<-unique(anal.param$collection)
 
 ```
 
@@ -22,8 +22,11 @@ Load raw collection data and summarize
 
 ```{r Load Data}
 
-collection <- "ATOWLS"
-data <-try(read.csv(paste(dat.dir, collection, ".RawData.csv", sep = "")), silent = T)
+for(m in 1:length(collection)) {
+  #m<-1 #for testing each species
+  
+data <-NULL 
+data <-try(read.csv(paste(dat.dir, collection[m], ".RawData.csv", sep = "")), silent = T)
 
 #check min and max year
 max(data$survey_year)
@@ -35,31 +38,32 @@ data<-data %>% filter(RouteIdentifier!="`") %>% drop_na(RouteIdentifier)
 route.yr.tot<-data %>% group_by(survey_year) %>% summarise(nroute=n_distinct(RouteIdentifier))
 
 #summarize the number of routes run in each year by Protocol
-#protocol_id 22=Northern 36=Central
 route.yr<-data %>% group_by(survey_year, protocol_id) %>% summarise(nroute=n_distinct(RouteIdentifier))
 
 route.yr<-cast(route.yr, survey_year~ protocol_id, value=c("nroute"))
+colnames(route.yr)<-c("survey_year", "NRoutes")
 
-#write.csv(route.yr, "Output/2023/ONOWLS.RoutesPerYear.csv")
-
+write.table(route.yr, file = paste(out.dir, collection[m], "RoutesPerYear.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
+  
 #summarize the total count of each species per year
 data$ObservationCount<-as.numeric(data$ObservationCount) 
 species.yr<-data %>% group_by(survey_year, CommonName, protocol_id) %>% summarise(count=sum(ObservationCount))
 species.yr<-cast(species.yr, CommonName+protocol_id~survey_year, value="count") 
 species.yr<-species.yr %>% filter(!(is.na(CommonName)))
-#write.csv(species.yr, "Output/2023/ONOWLS.SpeciesPerYear.csv")
+
+write.table(species.yr, file = paste(out.dir, collection[m], "SpeciesPerYear.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
 
 #Number of years a survey routes was run. 
 long_route<-data %>% group_by(protocol_id, RouteIdentifier) %>% summarise(min_year = min(survey_year), max_year=max(survey_year), n_year=n_distinct(survey_year)) 
 
-#write.csv(long_route, "Output/2023/ONOWLS.CountRouteYears.csv")
+write.table(long_route, file = paste(out.dir, collection[m], "CountRouteYear.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
 
 #Number of years a volunteer participate
 vol_year<-data %>% group_by(CollectorNumber, Collector)%>% summarise(min_year = min(survey_year), max_year=max(survey_year), n_year=n_distinct(survey_year)) 
 
-#write.csv(vol_year, "Output/2023/ONOWLS.VolunteerYears.csv")
+write.table(vol_year, file = paste(out.dir, collection[m], "VolYear.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
 
-
+} #end collection loop
 
 ```
 
