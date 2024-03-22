@@ -10,7 +10,6 @@
 #loc.dat<-loc.dat %>% na.omit() %>% distinct() %>% filter(latitude != "NULL")
 
 ##Combine data outputs into a single table for data processing
-
 events <- list.files(path = "C:/Users/dethier/Documents/ethier-scripts/National-NOS/output/",  # Identify all CSV files
                      pattern = "*Events.csv", full.names = TRUE) %>% 
   lapply(read_csv) %>%           # Store all files in list
@@ -44,7 +43,6 @@ write.csv(dat, "output/AllLocNOS.csv")
 
 
 ##Min Year and Max Year Filter for National Analysis 
-
 min.yr<-2008
 max.yr<-2021
 
@@ -70,6 +68,7 @@ loc.dat$cell_id<-ids
 
 #select the polygons that intersect the points
 Grid <- poly %>% filter(id %in% ids)
+Grid$id<-as.integer(Grid$id)
 
 #grid data are only those cells containing data. This layers is created in ArcGIS. 
 nb1 <- spdep::poly2nb(Grid, row.names=Grid$data); nb1
@@ -78,7 +77,9 @@ nb2INLA("nb1.graph", nb1)
 nb1.adj <- paste(getwd(),"/nb1.graph", sep="")
 g1 <- inla.read.graph("nb1.graph")
 
-grid<-loc.dat %>% select(RouteIdentifier, latitude, longitude, cell_id)
+grid<-NULL
+grid<-left_join(grid, Grid, by=c("cell_id"="id"))
+grid<-grid %>% select(RouteIdentifier, latitude, longitude, cell_id, province)
 
 ##---------------------------------------------------------
 #Set up data for analysis
@@ -124,11 +125,41 @@ for(m in 1:length(sp.list)) {
   #zero fill by merging with the events dataframe. 
   sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
   
-    ##-----------------------------------------------------------
+  ##-----------------------------------------------------------
   #Include back in grid id
-  grid<-grid %>% select(RouteIdentifier, cell_id) %>% distinct()
+  grid<-grid %>% select(RouteIdentifier, cell_id, province) %>% distinct()
   sp.data<- left_join(sp.data, grid, by="RouteIdentifier", multiple="all")
   sp.data<-sp.data %>% drop_na(cell_id)
+  
+  ##-----------------------------------------------------------
+  #set up grid key and replace NC StateProvince Code to match Grid allocation
+  grid_key<-NULL
+  grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
+  Grid2<-Grid %>% select(id, bcr_number, province)
+  Grid2$id<-as.integer(Grid2$id)
+  grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
+  grid_key$National<-"Canada"
+  row.names(grid_key) <- NULL
+  
+  #rename to match the NatureCounts area_codes
+  grid_key$province[grid_key$province  == "MAINE"]  <-  "QC"
+  grid_key$province[grid_key$province  == "NEW YORK"]  <- "QC"
+  grid_key$province[grid_key$province  == "NEW HAMPSHIRE"]  <- "QC"
+  grid_key$province[grid_key$province  == "QUEBEC"]  <-  "QC"
+  grid_key$province[grid_key$province  == "WASHINGTON"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "BRITISH COLUMBIA"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "YUKON"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "NORTHWEST TERRITORIES"]  <-  "BC_YT"
+  grid_key$province[grid_key$province  == "ONTARIO"]  <-  "ON"
+  grid_key$province[grid_key$province  == "MINNESOTA"]  <-  "ON"
+  grid_key$province[grid_key$province  == "MICHIGAN"]  <-  "ON"
+  grid_key$province[grid_key$province  == "NEW BRUNSWICK"]  <-  "NB"
+  grid_key$province[grid_key$province  == "NOVA SCOTIA"]  <-  "NS"
+  grid_key$province[grid_key$province  == "PRINCE EDWARD ISLAND"]  <-  "PE"
+  grid_key$province[grid_key$province  == "ALBERTA"]  <-  "AB"
+  grid_key$province[grid_key$province  == "MANITOBA"]  <-  "MB"
+  grid_key$province[grid_key$province  == "SASKATCHEWAN"]  <-  "SK"
+  grid_key$province[is.na(grid_key$province)]  <- "ON"
   
   ##----------------------------------------------------------
   #Observations per Province summary
@@ -142,8 +173,8 @@ for(m in 1:length(sp.list)) {
   #write.table(grid.sum, paste(out.dir, sp.list[m], "_", collection, "_SpeciesGridCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
   
   ##-----------------------------------------------------------
-  # Limit to species observed at least once per route 
-  # Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
+  #Limit to species observed at least once per route 
+  #Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
   site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
   site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
   site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
@@ -189,36 +220,6 @@ for(m in 1:length(sp.list)) {
   #Specify model with year-id effects so that we can predict the annual index value for each id
   sp.data$gamma_ij <- paste0(sp.data$alpha_i, "-", sp.data$survey_year)
   sp.data$yearfac = as.factor(sp.data$survey_year)
-  
-  #set up grid key
-  grid_key<-NULL
-  grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
-  Grid2<-Grid %>% select(id, bcr_number, province)
-  Grid2$id<-as.integer(Grid2$id)
-  grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
-  grid_key$National<-"Canada"
-  row.names(grid_key) <- NULL
-  
-  #rename to match the NatureCounts area_codes
-  grid_key$province[grid_key$province  == "MAINE"]  <-  "QC"
-  grid_key$province[grid_key$province  == "NEW YORK"]  <- "QC"
-  grid_key$province[grid_key$province  == "NEW HAMPSHIRE"]  <- "QC"
-  grid_key$province[grid_key$province  == "QUEBEC"]  <-  "QC"
-  grid_key$province[grid_key$province  == "WASHINGTON"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "BRITISH COLUMBIA"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "YUKON"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "NORTHWEST TERRITORIES"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "ONTARIO"]  <-  "ON"
-  grid_key$province[grid_key$province  == "MINNESOTA"]  <-  "ON"
-  grid_key$province[grid_key$province  == "MICHIGAN"]  <-  "ON"
-  grid_key$province[grid_key$province  == "NEW BRUNSWICK"]  <-  "NB"
-  grid_key$province[grid_key$province  == "NOVA SCOTIA"]  <-  "NS"
-  grid_key$province[grid_key$province  == "PRINCE EDWARD ISLAND"]  <-  "PE"
-  grid_key$province[grid_key$province  == "ALBERTA"]  <-  "AB"
-  grid_key$province[grid_key$province  == "MANITOBA"]  <-  "MB"
-  grid_key$province[grid_key$province  == "SASKATCHEWAN"]  <-  "SK"
-  grid_key$province[is.na(grid_key$province)]  <- "ON"
-  
   
   ###################################################
   #Model 1  
