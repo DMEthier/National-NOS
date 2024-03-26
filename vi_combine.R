@@ -4,7 +4,7 @@ Trends <- list.files(path = "C:/Users/dethier/Documents/ethier-scripts/National-
                      pattern = "*TrendsSlope.csv", full.names = TRUE) %>% 
   lapply(read_csv) %>%                              # Store all files in list
   bind_rows                                         # Combine data sets into one data set 
-data_all 
+ 
 
 #remove row with only NA
 n<-nrow(Trends)
@@ -17,7 +17,7 @@ Indices <- list.files(path = "C:/Users/dethier/Documents/ethier-scripts/National
                       pattern = "*AnnualIndices.csv", full.names = TRUE) %>% 
   lapply(read_csv) %>%                              # Store all files in list
   bind_rows                                         # Combine data sets into one data set 
-data_all
+
 
 m<-nrow(Indices)
 Indices<-Indices[2:m,]

@@ -41,7 +41,6 @@ loc.dat<-loc.dat[2:r,]
 loc.dat<-na.omit(loc.dat)
 write.csv(dat, "output/AllLocNOS.csv")
 
-
 ##Min Year and Max Year Filter for National Analysis 
 min.yr<-2008
 max.yr<-2021
@@ -78,8 +77,29 @@ nb1.adj <- paste(getwd(),"/nb1.graph", sep="")
 g1 <- inla.read.graph("nb1.graph")
 
 grid<-NULL
+grid<-loc.dat %>% select(RouteIdentifier, latitude, longitude, cell_id)
 grid<-left_join(grid, Grid, by=c("cell_id"="id"))
 grid<-grid %>% select(RouteIdentifier, latitude, longitude, cell_id, province)
+
+#rename to match the NatureCounts area_codes
+grid$province[grid$province  == "MAINE"]  <-  "QC"
+grid$province[grid$province  == "NEW YORK"]  <- "QC"
+grid$province[grid$province  == "NEW HAMPSHIRE"]  <- "QC"
+grid$province[grid$province  == "QUEBEC"]  <-  "QC"
+grid$province[grid$province  == "WASHINGTON"]  <-  "BC_YT"
+grid$province[grid$province  == "BRITISH COLUMBIA"]  <-  "BC_YT"
+grid$province[grid$province  == "YUKON"]  <-  "BC_YT"
+grid$province[grid$province  == "NORTHWEST TERRITORIES"]  <-  "BC_YT"
+grid$province[grid$province  == "ONTARIO"]  <-  "ON"
+grid$province[grid$province  == "MINNESOTA"]  <-  "ON"
+grid$province[grid$province  == "MICHIGAN"]  <-  "ON"
+grid$province[grid$province  == "NEW BRUNSWICK"]  <-  "NB"
+grid$province[grid$province  == "NOVA SCOTIA"]  <-  "NS"
+grid$province[grid$province  == "PRINCE EDWARD ISLAND"]  <-  "PE"
+grid$province[grid$province  == "ALBERTA"]  <-  "AB"
+grid$province[grid$province  == "MANITOBA"]  <-  "MB"
+grid$province[grid$province  == "SASKATCHEWAN"]  <-  "SK"
+grid$province[is.na(grid$province)]  <- "ON"
 
 ##---------------------------------------------------------
 #Set up data for analysis
@@ -131,36 +151,6 @@ for(m in 1:length(sp.list)) {
   sp.data<- left_join(sp.data, grid, by="RouteIdentifier", multiple="all")
   sp.data<-sp.data %>% drop_na(cell_id)
   
-  ##-----------------------------------------------------------
-  #set up grid key and replace NC StateProvince Code to match Grid allocation
-  grid_key<-NULL
-  grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
-  Grid2<-Grid %>% select(id, bcr_number, province)
-  Grid2$id<-as.integer(Grid2$id)
-  grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
-  grid_key$National<-"Canada"
-  row.names(grid_key) <- NULL
-  
-  #rename to match the NatureCounts area_codes
-  grid_key$province[grid_key$province  == "MAINE"]  <-  "QC"
-  grid_key$province[grid_key$province  == "NEW YORK"]  <- "QC"
-  grid_key$province[grid_key$province  == "NEW HAMPSHIRE"]  <- "QC"
-  grid_key$province[grid_key$province  == "QUEBEC"]  <-  "QC"
-  grid_key$province[grid_key$province  == "WASHINGTON"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "BRITISH COLUMBIA"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "YUKON"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "NORTHWEST TERRITORIES"]  <-  "BC_YT"
-  grid_key$province[grid_key$province  == "ONTARIO"]  <-  "ON"
-  grid_key$province[grid_key$province  == "MINNESOTA"]  <-  "ON"
-  grid_key$province[grid_key$province  == "MICHIGAN"]  <-  "ON"
-  grid_key$province[grid_key$province  == "NEW BRUNSWICK"]  <-  "NB"
-  grid_key$province[grid_key$province  == "NOVA SCOTIA"]  <-  "NS"
-  grid_key$province[grid_key$province  == "PRINCE EDWARD ISLAND"]  <-  "PE"
-  grid_key$province[grid_key$province  == "ALBERTA"]  <-  "AB"
-  grid_key$province[grid_key$province  == "MANITOBA"]  <-  "MB"
-  grid_key$province[grid_key$province  == "SASKATCHEWAN"]  <-  "SK"
-  grid_key$province[is.na(grid_key$province)]  <- "ON"
-  
   ##----------------------------------------------------------
   #Observations per Province summary
   route.sum<-sp.data %>% group_by(survey_year, StateProvince) %>% summarise(count = sum(ObservationCount))
@@ -186,10 +176,10 @@ for(m in 1:length(sp.list)) {
   # Limit to years when a species was observed at least a mean of 10 times per province over all years
   # Summarize years to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
   
-  year.summ<-melt(sp.data, id.var = "StateProvince",	measure.var = "ObservationCount")
-  year.summ <- cast(year.summ, StateProvince ~ variable,	fun.aggregate="sum")
+  year.summ<-melt(sp.data, id.var = "province",	measure.var = "ObservationCount")
+  year.summ <- cast(year.summ, province ~ variable,	fun.aggregate="sum")
   year.summ$mean<-year.summ$ObservationCount/(max.yr-min.yr)
-  yr.sp.list <- unique(subset(year.summ, select = c("StateProvince"), ObservationCount >= 10))
+  yr.sp.list <- unique(subset(year.summ, select = c("province"), mean >= 10))
   yr.sp.list$Species<-sp.list[m]
   write.table(yr.sp.list, paste(out.dir, sp.list[m], "_ProvinceSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
   
@@ -198,11 +188,11 @@ for(m in 1:length(sp.list)) {
   #yr.sp.list <- unique(subset(yr.summ, select = c("survey_year"), ObservationCount >= 1))
   
   # Limit raw data to these species, i.e., those that were observed at least once on a route 
-  sp.data <- merge(sp.data, yr.sp.list, by = c("StateProvince"))
+  sp.data <- merge(sp.data, yr.sp.list, by = c("province"))
   
   ##-----------------------------------------------------------
   # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
-  sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, cell_id, nstop, StateProvince, latitude, longitude, protocol_id) %>% dplyr::summarise(count=sum(ObservationCount))
+  sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, cell_id, nstop, province, latitude, longitude, protocol_id) %>% dplyr::summarise(count=sum(ObservationCount))
   sp.data$species_id<-sp.id  
   max.yr<-as.numeric(max(sp.data$survey_year))
   min.yr<-as.numeric(min(sp.data$survey_year))
@@ -220,6 +210,20 @@ for(m in 1:length(sp.list)) {
   #Specify model with year-id effects so that we can predict the annual index value for each id
   sp.data$gamma_ij <- paste0(sp.data$alpha_i, "-", sp.data$survey_year)
   sp.data$yearfac = as.factor(sp.data$survey_year)
+  
+    ##-----------------------------------------------------------
+  #set up grid key and replace NC StateProvince Code to match Grid allocation
+  grid_key<-NULL
+ # grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
+  grid_key<-unique(sp.data[, c("cell_id", "alpha_i", "province")])
+  Grid2<-Grid %>% select(id, bcr_number)
+  Grid2$id<-as.integer(Grid2$id)
+  grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
+  grid_key$National<-"Canada"
+  row.names(grid_key) <- NULL
+  
+  #Limit to province with data
+  grid_key <- merge(grid_key, yr.sp.list, by = c("province"))
   
   ###################################################
   #Model 1  
@@ -598,24 +602,24 @@ for(m in 1:length(sp.list)) {
 #Provincial alpha samples
 
   tmp2<-NULL
-  tmp2 <- select(sp.data, species_id, survey_year, StateProvince, count)
+  tmp2 <- select(sp.data, species_id, survey_year, province, count)
   
   #for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
   nyears<-(max.yr-min.yr)+1
   pred.yr<-matrix(nrow=posterior_ss, ncol=nyears)
   
-  prov.list<-unique(sp.data$StateProvince)
+  prov.list<-unique(sp.data$province)
   
   for (h in 1:posterior_ss){
     pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
     tmp2[ncol(tmp2)+1]<-pred
    }
 
-  tmp1<-tmp2 %>% group_by(survey_year, StateProvince) %>% summarise_all(mean, na.rm=TRUE)
+  tmp1<-tmp2 %>% group_by(survey_year, province) %>% summarise_all(mean, na.rm=TRUE)
   tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
   
   mn.yr1<-NULL
-  mn.yr1<-tmp1 %>% select(survey_year, StateProvince, index, lower_ci, upper_ci, stdev) %>% mutate(
+  mn.yr1<-tmp1 %>% select(survey_year, province, index, lower_ci, upper_ci, stdev) %>% mutate(
 ##Provincial 
   results_code="OWLS",
   version="2023",
@@ -626,7 +630,7 @@ for(m in 1:length(sp.list)) {
   species_name=sp,
   species_id=sp.id)
   
-  mn.yr1$area_code<-mn.yr1$StateProvince
+  mn.yr1$area_code<-mn.yr1$province
   mn.yr1$year=mn.yr1$survey_year
   
   mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
@@ -679,7 +683,7 @@ for(m in 1:length(sp.list)) {
 
   mn.yr1<-NULL
   tmp1<-NULL
-  tmp1<-tmp2 %>% select(-StateProvince) %>%  group_by(survey_year) %>% summarise_all(mean, na.rm=TRUE)
+  tmp1<-tmp2 %>% select(-province) %>%  group_by(survey_year) %>% summarise_all(mean, na.rm=TRUE)
   tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
   mn.yr1 <-tmp1 %>% select(survey_year, index, lower_ci, upper_ci, stdev) %>% mutate(
   results_code="OWLS",
