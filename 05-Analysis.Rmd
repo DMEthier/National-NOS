@@ -28,6 +28,8 @@ library(INLA)
 library(inlabru)
 library(leaflet)
 
+source("00-setup.R")
+
 ```
 
 Code to read and append the relevant files from the out directory. This is ObservationCount for the national trends. 

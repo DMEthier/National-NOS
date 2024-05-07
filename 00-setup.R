@@ -77,11 +77,16 @@ sp.names<-sp.names %>% dplyr::select(species_id, english_name, scientific_name)
 
 make_plot_field <- function(data_stk, scale_label) {
   ggplot() +
-    annotation_map_tile(type = "osm", zoomin = 0) +
+    geom_sf(data = qq, fill = NA) +
+    #annotation_map_tile(type = "osm", zoomin = 0) +
     geom_sf(fill = NA) +
     coord_sf(datum = NA) +
     geom_spatraster(data = data_stk) +
     labs(x = "", y = "") +
+    #scale_fill_gradient2(low = ("red4"),
+    #                     mid = "white",
+    #                     high = ("royalblue4"), midpoint = 0, space = "Lab",
+    #                     guide = "colourbar") +
     scale_fill_viridis(option="magma", scale_label, na.value="transparent")+
     #scale_fill_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
     theme_bw() +
@@ -90,11 +95,16 @@ make_plot_field <- function(data_stk, scale_label) {
 
 make_plot_site <- function(data, scale_label) {
   ggplot() +
-    annotation_map_tile(type = "osm", zoomin = 0) +
+    geom_sf(data = qq, fill = NA) +
+    #annotation_map_tile(type = "osm", zoomin = 0) +
     geom_sf() +
     coord_sf(datum = NA) +
-    geom_sf(data = data, size = 5, mapping = aes(colour = value)) +
+    geom_sf(data = data, size = 5, mapping = aes(colour = value, geometry=geometry)) +
     labs(x = "", y = "") +
+    #scale_fill_gradient2(low = ("red4"),
+    #                     mid = "white",
+    #                     high = ("royalblue4"), midpoint = 0, space = "Lab",
+    #                     guide = "colourbar") +
     scale_colour_viridis(option="magma", scale_label, na.value="transparent")+
     #scale_colour_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
     theme_bw() +

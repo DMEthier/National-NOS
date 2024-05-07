@@ -25,75 +25,57 @@ library(sp)
 library(sf)
 library(spdep)
 library(naturecounts)
-
-source("./functions/LOESS.R")
+library(oce)
+library(ggspatial)
 
 #remotes::install_github("inbo/inlatools")
 library(inlatools)
+
+#Source scripts
+source("00-setup.R")
 
 ```
 
 Load data and set directories
 ```{r data}
 
-dat<-read.csv("output/QC_OwlDataClean.csv")
-events<-read.csv("output/QC_Events.csv")
-#grid<-read.csv("data/QC_MapSqaureID.csv") #this files was map in ArcGIS using the 'loc' for routes. 
+dat<-read.csv("output/QCOWLSOwlDataClean.csv")
 
-map<-read.csv("output/QC_Map.csv")
+#remove COVID data
+  dat<-dat %>% filter(survey_year!=2020)
+  dat<-dat %>% filter(survey_year!=2021)
+#Route QC112 has the same start point as QC198. Remove QC112 since it was only samples for 1 year
+  dat<-dat %>% filter(RouteIdentifier != "QC112")
+  
+events<-read.csv("output/QCOWLSEvents.csv")
 
-out.dir<-"output/"
+#remove COVID data
+  events<-events %>% filter(survey_year!=2020)
+  events<-events %>% filter(survey_year!=2021)
+  events<-events %>%filter(RouteIdentifier != "QC112")
 
-```
+loc.dat<-read.csv("output/QCOWLSMap.csv") 
 
-Make Spatial Grid for iCAR Analysis
-```{r spatial grid}
-
-#all grid for North American
-#poly<- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", #layer="nos_na_grid")
-
-#grid data are only those cells containing data. This layers is created in ArcGIS. 
-Grid <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_New")
-nb1 <- spdep::poly2nb(Grid, row.names=Grid$data); nb1
-
-#Neighbour list object:
-#Number of regions: 41 
-#Number of nonzero links: 186 
-#Percentage nonzero weights: 11.06484 
-#Average number of links: 4.536585
-
-is.symmetric.nb(nb1, verbose = FALSE, force = TRUE)
-nb2INLA("nb1.graph", nb1)
-nb1.adj <- paste(getwd(),"/nb1.graph", sep="")
-g1 <- inla.read.graph("nb1.graph")
-
-#This needed 'Projected' in Arc GIS from Albers to Nad83
-Grid_proj<-st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Grid_proj")
-
-#Routes .shp made in ArcGIS
-Route <- st_read(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="QC_Route_new")
-
-#spatial join
-grid<-st_join(Route, left=TRUE, Grid_proj)
-grid<-grid %>% select(RouteIdent, latitude, longitude, id, bcr_number, bcr_name)
+out.dir<-"output/QC/"
 
 ```
 
-iCAR Analysis at the Degree Block Grid
-```{r output}
-
-##--------------------------------------------------------
-##Create output tables before entering the loop
+Create output tables
+```{r output tables}
 
 #Posterior Summary
 post_sum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 12, byrow = FALSE, dimnames = NULL))
 names(post_sum) <- c("alpha_i", "alph", "alph_ll", "alph_ul", "alph_iw", "tau", "tau_ll", "tau_ul", "tau_iw", "tau_sig", "id", "taxa_code")
-write.table(post_sum, file = paste(out.dir, "PosteriorSummary.csv"), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+write.table(post_sum, file = paste(out.dir, "PosteriorSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+post_sum2<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
+names(post_sum2) <- c("RouteIdentifier", "alph", "tau", "lower_ci", "upper_ci", "easting", "northing", "species_id", "CommonName")
+write.table(post_sum2, file = paste(out.dir, "PosteriorSummaryRoute.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 #Output for SoBC import
-indices.csv <- as.data.frame(matrix(data = NA, nrow = 1, ncol = 16, byrow = FALSE,
+indices.csv <- as.data.frame(matrix(data = NA, nrow = 1, ncol = 15, byrow = FALSE,
                                     dimnames = NULL))
-names(indices.csv) <- c("results_code",	"version",	"area_code", "year",	"season",	"period",	 "species_code",	"species_id",	"index",	"stderr",	"stdev",	"upper_ci",	"lower_ci",	"LOESS_index",	"species_name",	"species_sci_name") 
+names(indices.csv) <- c("results_code", "version", "area_code", "season", "period", "species_code", "species_id", "year", "index", "stderr", "stdev", "upper_ci", "lower_ci", "LOESS_index", "trend_index")
 
 
 write.table(indices.csv, file = paste(out.dir, 
@@ -101,29 +83,71 @@ write.table(indices.csv, file = paste(out.dir,
             row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 
-## Create text file for trends (appending year periods into one file)
+## Create text file for trends 
 trends.csv <- as.data.frame(matrix(data = NA, nrow = 1, ncol = 38, 
                                    byrow = FALSE, dimnames = NULL))
-
-names(trends.csv) <- c("results_code",	"version",	"area_code",	"species_code",	"species_id",	"season",	"period",	"years",	"year_start",	"year_end",	"trnd",	"index_type",	"upper_ci", "lower_ci", "stderr",	"model_type",	"model_fit",	"percent_change",	"percent_change_low",	"percent_change_high",	"prob_decrease_0",	"prob_decrease_25",	"prob_decrease_30",	"prob_decrease_50",	"prob_increase_0",	"prob_increase_33",	"prob_increase_100",	"confidence",	"precision_num",	"precision_cat",	"coverage_num",	"coverage_cat",	"sample_size",	"prob_LD", "prob_MD", "prob_LC", "prob_MI", "prob_LI")
+names(trends.csv) <- c("results_code",	"version",	"area_code",	"season",	"period", "species_code",	"species_id",	"years", "year_start",	"year_end",	"trnd",	"lower_ci", "upper_ci", "stderr",	"model_type",	"model_fit",	"percent_change",	"percent_change_low",	"percent_change_high",	"prob_decrease_0",	"prob_decrease_25",	"prob_decrease_30",	"prob_decrease_50",	"prob_increase_0",	"prob_increase_33",	"prob_increase_100", "suitability", "precision_num",	"precision_cat",	"coverage_num",	"coverage_cat",	"sample_size", "sample_size_units", "prob_LD", "prob_MD", "prob_LC", "prob_MI", "prob_LI")
 
 #Slope Trends
-write.table(trends.csv, file = paste(out.dir, 
+write.table(trends.csv, file = paste(out.dir,  
                                      "NOS_TrendsSlope", ".csv", sep = ""), 
             row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 ```
 
-#1 degree cell and provincal scale analysis
+Make Spatial Grid for iCAR Analysis
+```{r spatial grid}
+##Min Year and Max Year Filter for National Analysis 
+min.yr<-2008
+max.yr<-2023
 
-```{r analysis}
+events<-events %>% filter(survey_year>=min.yr & survey_year<=max.yr)
+dat<-dat %>% filter(survey_year>=min.yr & survey_year<=max.yr)
+
+#Make Spatial Grid for iCAR Analysis
+
+#all grid for North American
+poly<- read_sf("data/nos_na_grid.shp") #pull in the grid data
+#poly<- read_sf(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="nos_na_grid")
+
+#sf point
+#loc.dat<-loc.dat %>% drop_na()
+loc.xy<-events %>% select(RouteIdentifier, longitude, latitude) %>% distinct()
+xy<-st_as_sf(loc.xy, coords = c("longitude", "latitude"))
+st_crs(xy)<-"+proj=longlat +datum=NAD83"
+
+#sf point
+newCRS<-st_crs(poly) #get the CRS of the ply data
+xy<-st_transform(xy, newCRS) #transform 
+Grid <- poly %>% st_filter(xy, .pred = st_intersects)
+Grid$id<-as.integer(Grid$id)
+
+#add cell id to point data
+##this is wrong and needs fixed. 
+loc.xy<- st_join(Grid, xy)
+loc.xy<-loc.xy %>% dplyr::rename(cell_id=id) 
+
+#grid data are only those cells containing data. This layers is created in ArcGIS. 
+nb1 <- spdep::poly2nb(Grid, row.names=Grid$data); nb1
+is.symmetric.nb(nb1, verbose = FALSE, force = TRUE)
+nb2INLA("nb1.graph", nb1)
+nb1.adj <- paste(getwd(),"/nb1.graph", sep="")
+g1 <- inla.read.graph("nb1.graph")
+
+grid<-NULL
+grid<-loc.xy %>% select(RouteIdentifier, cell_id)
+
+#rename to match the NatureCounts area_codes
+grid$province <- "QC"
+Grid$province<-"QC"
+
 ##---------------------------------------------------------
 #Set up data for analysis
 
 dat<-dat %>% select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "CollectorNumber", "ObservationCount")
 #dat<-dat %>% filter(CommonName!="Boreal Owl")
 
-sp.list<-unique(dat$CommonName)
+#sp.list<-unique(dat$CommonName)
 max.yr<-max(dat$survey_year)
 min.yr<-min(dat$survey_year)
 
@@ -132,1194 +156,1718 @@ sp.names<-meta_species_taxonomy()
 sp.names<-sp.names %>% select(species_id, english_name, scientific_name)
 
 
+```
+
+
+iCAR Analysis at the Degree Block Grid
+```{r output}
+
 ##----------------------------------------------------------
 #Create species analysis loop
 
-for(m in 1:length(sp.list)) {
- #m<-1 #for testing each species
+sp.list<-unique(dat$CommonName)
 
+for(m in 1:length(sp.list)) {
+  #m<-1 #for testing each species
+  
   sp.data <-NULL 
   sp.data <- filter(dat, CommonName == sp.list[m]) %>%
-      droplevels()
+    droplevels()
   sp<-sp.list[m] 
   sp.id<-unique(sp.data$species_id)
-
-print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
-
-
-##-----------------------------------------------------------
-#zero fill by merging with the events dataframe. 
-sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
-
-##-----------------------------------------------------------
-#Include back in grid id
-grid<-grid %>% select(RouteIdent, id) %>% distinct()
-sp.data<- left_join(sp.data, grid, by=c("RouteIdentifier" = "RouteIdent"), multiple="all")
-
-##----------------------------------------------------------
-#Observations per route summary
-route.sum<-sp.data %>% group_by(survey_year, RouteIdentifier) %>% summarise(count = sum(ObservationCount))
-route.sum<-cast(route.sum, RouteIdentifier~survey_year, value="count")
-
-write.table(route.sum, paste(out.dir, sp.list[m], "_SpeciesRouteCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
-
-#Observations per grid summary
-grid.sum<-sp.data %>% group_by(survey_year, id) %>% summarise(count = sum(ObservationCount))
-grid.sum<-cast(grid.sum, id~survey_year, value="count")  
-
-write.table(grid.sum, paste(out.dir, sp.list[m], "_SpeciesGridCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
-
-##-----------------------------------------------------------
-# Limit to species observed at least once per route 
-# Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
-
-  site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
   
-site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
+  print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
+  
+  sp.data$survey_year<-as.numeric(sp.data$survey_year)
+  events$survey_year<-as.numeric(events$survey_year)
+  sp.data$ObservationCount<-as.numeric(sp.data$ObservationCount)
+  
+  ##-----------------------------------------------------------
+  #zero fill by merging with the events dataframe. 
+  sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber"), multiple="all") %>%   mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
+  
+  ##-----------------------------------------------------------
+  #Include back in grid id
+  grid<-grid %>% select(RouteIdentifier, cell_id, province) %>% distinct()
+  sp.data<- left_join(sp.data, grid, by="RouteIdentifier", multiple="all")
+  sp.data<-sp.data %>% drop_na(cell_id)
+  
+  ##----------------------------------------------------------
+  #Observations per Province summary
+  route.sum<-sp.data %>% group_by(survey_year, StateProvince) %>% summarise(count = sum(ObservationCount))
+  route.sum<-cast(route.sum, StateProvince~survey_year, value="count")
+  write.table(route.sum, paste(out.dir, sp.list[m], "_ProvinceYearSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
+  
+  #Observations per grid summary
+  grid.sum<-sp.data %>% group_by(survey_year, cell_id) %>% summarise(count = sum(ObservationCount))
+  grid.sum<-cast(grid.sum, cell_id~survey_year, value="count")  
+  write.table(grid.sum, paste(out.dir, sp.list[m], "_SpeciesGridCountSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)
+  
+  ##-----------------------------------------------------------
+  #Limit to species observed at least once per route 
+  #Summarize survey site to determine which species have been observed at least once (looking at the total count column) those with sum <= 1 across all survey years will be dropped from analysis (implies never observed on a route (i.e., outside range or inappropriate habitat))
+  site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
+  site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
   site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
-
-# Limit raw data to these species, i.e., those that were observed at least once on a route 
+  
+  # Limit raw data to these species, i.e., those that were observed at least once on a route 
   sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
   
-##-----------------------------------------------------------
-# Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
-sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, id, nstop, StateProvince, bcr, latitude, longitude) %>% dplyr::summarise(count=sum(ObservationCount))
+  ##-----------------------------------------------------------
+  # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covariate (or offset) in the model to control for route level effort.  
+  sp.data<-sp.data %>% group_by(species_id, RouteIdentifier, survey_year, CollectorNumber, cell_id, nstop, province, latitude, longitude, protocol_id) %>% dplyr::summarise(count=sum(ObservationCount))
+  sp.data$species_id<-sp.id  
+  max.yr<-as.numeric(max(sp.data$survey_year))
+  min.yr<-as.numeric(min(sp.data$survey_year))
   
-sp.data$species_id<-sp.id  
+  ##-----------------------------------------------------------
+  #standardize year to max, prepare index variables 
+  #where i = grid cell, k = route, t = year, e = protocol_id
+  sp.data<-as.data.frame(sp.data)
+  sp.data <- sp.data %>% mutate(std_yr = survey_year - max.yr)
+  #sp.data$ellip_e <- as.integer(factor(sp.data$protocol_id))#index for random protocol effect
+  sp.data$kappa_k <- as.integer(factor(sp.data$RouteIdentifier))#index for the random route effect
+  sp.data$tau_i <- sp.data$alpha_i <- as.integer(factor(sp.data$cell_id)) #index for each id intercept and slope
+  sp.data<-as.data.frame(sp.data)
   
-##-----------------------------------------------------------
-#standardize year to 2023, prepare index variables 
-#where i = grid cell, k = route, t = year
-sp.data <- sp.data %>% mutate(std_yr = survey_year - max.yr)
-sp.data$kappa_k <- as.integer(factor(sp.data$RouteIdentifier)) #index for the random site effect
-sp.data$tau_i <- sp.data$alpha_i <- as.integer(factor(sp.data$id)) #index for each id intercept and slope
-sp.data<-as.data.frame(sp.data)
-
-#Specify model with year-id effects so that we can predict the annual index value for each id
-sp.data$gamma_ij <- paste0(sp.data$alpha_i, "-", sp.data$survey_year)
-sp.data$yearfac = as.factor(sp.data$survey_year)
-
-#set up grid key
-grid_key<-NULL
-grid_key <- unique(sp.data[, c("id", "alpha_i")])
-grid_key$StateProvince<-"All"
-row.names(grid_key) <- NULL
-
-
-###################################################
-#Model 1  
-
-#Formula 
-f1 <- count ~ -1 + nstop + #number of stops included as a covariate
-  # cell ICAR random intercepts
-  f(alpha_i, model="besag", graph=g1, constr=FALSE, scale.model=TRUE,
-    hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
-  # cell ICAR random year slopes
-  f(tau_i, std_yr, model="besag", graph=g1, constr=FALSE, scale.model=TRUE,
-    hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
-  # random site intercepts
-  f(kappa_k, model="iid", constr=TRUE,
-    hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))+
- # id-year effect
-  f(gamma_ij, model="iid", constr=TRUE, 
-   hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))
-
-#---------------------------------------------------------
-#Sample code to test multiple models  
-#Run nbinomial, poisson, nb zip model. Select the model with the lowest DIC.                
+  #Specify model with year-id effects so that we can predict the annual index value for each id
+  sp.data$gamma_ij <- paste0(sp.data$alpha_i, "-", sp.data$survey_year)
+  sp.data$yearfac = as.factor(sp.data$survey_year)
   
-#index.nb <-index.pois <-index.zin<- NULL
-
-#index.nb <- try(inla(f1, family = "nbinomial", data = sp.data, #E = nstop,
-#                     control.predictor = list(compute = TRUE), control.compute = #list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
-
-#index.pois <- try(inla(f1, family = "poisson", data = sp.data, #E = nstop,
-#                       control.predictor = list(compute = TRUE), control.compute #= list(dic=TRUE, config = TRUE),  verbose =TRUE), silent = T)
-
-#index.zip <- try(inla(f1, family = "zeroinflatedpoisson1", data = sp.data, #E = #nstop, 
-#                      control.predictor = list(compute = TRUE), control.compute = #list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
-
-
-#  model<-c("nbinomial", "poisson", "zeroinflatedpoisson1")
-#  index.nb.dic<-ifelse(class(index.nb) == 'try-error', NA, #index.nb[["dic"]][["dic"]])
-#  index.pois.dic<-ifelse(class(index.pois) == 'try-error', NA, #index.pois[["dic"]][["dic"]])
-#  index.zip.dic<-ifelse(class(index.zip) == 'try-error', NA, #index.zip[["dic"]][["dic"]])
-#  dic<-c(index.nb.dic, index.pois.dic, index.zip.dic)
-#  index<-c("index.nb", "index.pois", "index.zip")
-#  t.model<-data.frame(model, index, dic)
-
-#write.table(t.model, paste(out.dir, sp.list[m], "_ModelSelection.csv", sep=""), #row.names = FALSE, append = FALSE, quote = FALSE, sep = ",", col.names = TRUE)  
+    ##-----------------------------------------------------------
+  #set up grid key and replace NC StateProvince Code to match Grid allocation
+  grid_key<-NULL
+ # grid_key <- unique(sp.data[, c("cell_id", "alpha_i")])
+  grid_key<-unique(sp.data[, c("cell_id", "alpha_i", "province")])
+  Grid2<-Grid %>% select(id, bcr_number)
+  Grid2$id<-as.integer(Grid2$id)
+  grid_key <-left_join(grid_key, Grid2, by=c("cell_id" = "id"))
+  row.names(grid_key) <- NULL
+ 
   
-#  t.model<-t.model %>% slice_min(dic, na_rm = TRUE)
-#  family<-t.model[,1]
-#  index<-t.model[,2]
-
-#-----------------------------------------------------------
-##Run top model, which has ZIP for all owls species in QC
-
-#family<-"zeroinflatedpoisson1"
-#index<-"index.zip"
-
-index<-"index.nb"
+  ###################################################
+  #Model 1  
   
-  #rerun the top model and save output
-  out1<-try(inla(f1, family = "nbinomial", data = sp.data, #E = nstop, 
+  #Formula 
+  f1 <- count ~ -1 + nstop +
+    # cell ICAR random intercepts
+    f(alpha_i, model="besag", graph=g1, constr=FALSE, scale.model=TRUE,
+      hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
+    # cell ICAR random year slopes
+    f(tau_i, std_yr, model="besag", graph=g1, constr=FALSE, scale.model=TRUE,
+      hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
+    # random route intercepts
+    f(kappa_k, model="iid", constr=TRUE,
+      hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))+
+    #id-year effect
+    f(gamma_ij, model="iid", constr=TRUE, 
+      hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))
+  
+  if(sp=="Great Horned Owl"){
+    fam<-"poisson" 
+  }else{
+    fam<-"nbinomial"
+  }
+ 
+  
+  out1<-try(inla(f1, family = fam, data = sp.data, 
                  control.predictor = list(compute = TRUE), control.compute = list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
+   
   
-
-##---------------------------------------------------------
-#Results
-#Random spatial
-random.out<-out1$summary.hyperpar[,c("mean", "sd", "0.025quant", "0.975quant")]
-random.out<-signif(random.out, digits = 4)
-random.out$Species <- sp.list[m]
-names(random.out)[1:5] <- c("mean", "SD", "0.025quant", "0.975quant", "Speices")
-
-write.table(random.out, paste(out.dir, "Random_Summary.csv"), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
-
-##Remove cells with no routes
-cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
-
-# get alpha summaries
-alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
-alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
-alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
-alph_iw <- alph_ul - alph_ll
-
-# get tau summaries
-tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
-        - 1) * 100
-tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
-           - 1) * 100
-tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
-           - 1) * 100
-tau_iw <- tau_ul - tau_ll
-
-##-----------------------------------------------------------
-#time series plots per cell
-#calculate cell level index of abundance
-
-#create a loop to get abundance index output per cell-year
-
-for(k in 1:length(cells_with_counts)) {
-
-#k<-1 #for testing each cell
-   
-  cell1 <-NULL 
-  cell1 <- cells_with_counts[k]
+  ##Cell Estimate of Alpha
+  ##---------------------------------------------------------
+  #Results
+  #Random spatial
+  random.out<-out1$summary.hyperpar[,c("mean", "sd", "0.025quant", "0.975quant")]
+  random.out<-signif(random.out, digits = 4)
+  random.out$Species <- sp.list[m]
+  names(random.out)[1:5] <- c("mean", "SD", "0.025quant", "0.975quant", "Speices")
   
-#need to back assign the factor cell1 to its original grid_id
-cell_id<-sp.data %>% ungroup() %>% dplyr::select(id, alpha_i) %>% distinct()
-grid1<- as.character(cell_id[k,"id"])
- 
-#median 
-   d0 <- out1$summary.random$alpha_i$`0.5quant`[cell1]
-   d1 <- out1$summary.random$tau_i$`0.5quant`[cell1]
-   d2 <- data.frame(
-   styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                        grep(paste0("\\b",cell1,"-"),
-                             out1$summary.random$gamma_ij$ID,
+  write.table(random.out, paste(out.dir, "Random_Summary.csv", sep=""), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
+  
+  ##Remove cells with no routes
+  cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
+  
+  # get alpha summaries
+  alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
+  alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
+  alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
+  alph_iw <- alph_ul - alph_ll
+  
+  # get tau summaries
+  tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
+          - 1) * 100
+  tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
+             - 1) * 100
+  tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
+             - 1) * 100
+  tau_iw <- tau_ul - tau_ll
+  
+  ##-----------------------------------------------------------
+  #time series plots per cell
+  
+  #Calculate cell level index of abundance
+  
+  #create a loop to get abundance index output per cell-year
+  
+  for(k in 1:length(cells_with_counts)) {
+    
+    #k<-1 #for testing each cell
+    
+    cell1 <-NULL 
+    cell1 <- cells_with_counts[k]
+    
+    #need to back assign the factor cell1 to its original grid_id
+    cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
+    grid1<- as.character(cell_id[k,"cell_id"])
+    
+    #median 
+    d0 <- out1$summary.random$alpha_i$`0.5quant`[cell1]
+    d1 <- out1$summary.random$tau_i$`0.5quant`[cell1]
+    d2 <- data.frame(
+      styear=as.numeric(gsub(paste0(cell1,"-"), "",
+                             grep(paste0("\\b",cell1,"-"),
+                                  out1$summary.random$gamma_ij$ID,
                                   value=TRUE)))- max.yr, gamma_ij=
-     out1$summary.random$gamma_ij$`0.5quant`[grep(
-       paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-     arrange(styear)
-   d2$x0 <- d0
-   d2$x1 <- d2$styear*d1
-   d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma_ij)
-   d2$cell<-cell1
-   d2<-merge(d2, grid_key, by.x="cell", by.y="alpha_i")
-   d2$taxa_code<-sp
-   
-   d3<-d2 %>% select(id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
- 
-#lci     
-   l0 <- out1$summary.random$alpha_i$`0.025quant`[cell1]
-   l1 <- out1$summary.random$tau_i$`0.025quant`[cell1]
-   l2 <- data.frame(
-   styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                        grep(paste0("\\b",cell1,"-"),
-                             out1$summary.random$gamma_ij$ID,
+        out1$summary.random$gamma_ij$`0.5quant`[grep(
+          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+      arrange(styear)
+    d2$x0 <- d0
+    d2$x1 <- d2$styear*d1
+    d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma_ij)
+    d2$cell<-cell1
+    d2<-merge(d2, grid_key, by.x="cell", by.y="alpha_i")
+    d2$taxa_code<-sp
+    
+    d3<-d2 %>% select(cell_id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
+    
+    #lci     
+    l0 <- out1$summary.random$alpha_i$`0.025quant`[cell1]
+    l1 <- out1$summary.random$tau_i$`0.025quant`[cell1]
+    l2 <- data.frame(
+      styear=as.numeric(gsub(paste0(cell1,"-"), "",
+                             grep(paste0("\\b",cell1,"-"),
+                                  out1$summary.random$gamma_ij$ID,
                                   value=TRUE)))- max.yr, gamma_ij=
-     out1$summary.random$gamma_ij$`0.025quant`[grep(
-       paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-     arrange(styear)
-   l2$x0 <- l0
-   l2$x1 <- l2$styear*l1
-   l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma_ij)
-   l2$cell<-cell1
-   l2<-merge(l2, grid_key, by.x="cell", by.y="alpha_i")
-   
-  l3<-l2 %>% select(id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
-
-#uci  
- u0 <- out1$summary.random$alpha_i$`0.975quant`[cell1]
-   u1 <- out1$summary.random$tau_i$`0.975quant`[cell1]
-   u2 <- data.frame(
-   styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                        grep(paste0("\\b",cell1,"-"),
-                             out1$summary.random$gamma_ij$ID,
+        out1$summary.random$gamma_ij$`0.025quant`[grep(
+          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+      arrange(styear)
+    l2$x0 <- l0
+    l2$x1 <- l2$styear*l1
+    l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma_ij)
+    l2$cell<-cell1
+    l2<-merge(l2, grid_key, by.x="cell", by.y="alpha_i")
+    
+    l3<-l2 %>% select(cell_id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
+    
+    #uci  
+    u0 <- out1$summary.random$alpha_i$`0.975quant`[cell1]
+    u1 <- out1$summary.random$tau_i$`0.975quant`[cell1]
+    u2 <- data.frame(
+      styear=as.numeric(gsub(paste0(cell1,"-"), "",
+                             grep(paste0("\\b",cell1,"-"),
+                                  out1$summary.random$gamma_ij$ID,
                                   value=TRUE)))- max.yr, gamma_ij=
-     out1$summary.random$gamma_ij$`0.975quant`[grep(
-       paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-     arrange(styear)
-   u2$x0 <- u0
-   u2$x1 <- u2$styear*u1
-   u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma_ij)
-   u2$cell<-cell1
-   u2<-merge(u2, grid_key, by.x="cell", by.y="alpha_i")
- 
-   
-u3<-u2 %>% select(id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
-
-d3<-merge(d3, l3, by=c("id", "year"))
-d3<-merge(d3, u3, by=c("id", "year"))
-
-d3$results_code<-"OWLS"
-d3$version<-max.yr
-d3$area_code<-d3$id
-d3$year<-d3$year
-d3$season<-"Breeding"
-d3$period<-"all years"
-d3$species_code<-""
-d3$index<-d3$abund
-d3$stderr<-""
-d3$stdev<-""
-d3$upper_ci<-d3$abund_uci
-d3$lower_ci<-d3$abund_lci
-d3$species_name<-d3$taxa_code
-d3$species_id<-sp.id
-
-d3<-left_join(d3, sp.names, by=c("species_id"))
-d3$species_sci_name<-d3$scientific_name
-
-if(nrow(d3)>=10){
-d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
-}else{
-  d3$LOESS_index<-""
-}
-
-d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
-      
-write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-
-} #end cell specific loop
-
-
+        out1$summary.random$gamma_ij$`0.975quant`[grep(
+          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+      arrange(styear)
+    u2$x0 <- u0
+    u2$x1 <- u2$styear*u1
+    u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma_ij)
+    u2$cell<-cell1
+    u2<-merge(u2, grid_key, by.x="cell", by.y="alpha_i")
+    
+    
+    u3<-u2 %>% select(cell_id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
+    
+    d3<-merge(d3, l3, by=c("cell_id", "year"))
+    d3<-merge(d3, u3, by=c("cell_id", "year"))
+    
+    d3 <-d3 %>% mutate(
+      results_code="OWLS", 
+   version="2023",
+   area_code=d3$cell_id,
+   year=d3$year,
+   season="Breeding",
+   period="all years",
+   species_code="",
+   index=d3$abund,
+   stderr="",
+   stdev="",
+   upper_ci=d3$abund_uci,
+   lower_ci=d3$abund_lci,
+   species_name=d3$taxa_code,
+   species_id=sp.id)
+    
+    d3<-left_join(d3, sp.names, by=c("species_id"))
+    d3$species_sci_name<-d3$scientific_name
+    
+    ##LOESS SMOOTH
+    if(nrow(d3)>=10){
+      d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
+    }else{
+      d3$LOESS_index<-""
+    }
+    
+    ##Trend Slope 
+    d2$trend_index<-exp(d1*d2$styear + d0)
+    d3$trend_index<-d2$trend_index
+    
+    d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+    
+    write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    
+  } #end cell specific loop
+  
 ##-----------------------------------------------------------
 #Explore posterior samples 
-
-#grid2<-grid_key %>% filter(alpha_i==cells_with_counts)
-grid2<-grid_key
-
-#posterior sample 
-posterior_ss <- 1000 # change as appropriate
-samp1 <- inla.posterior.sample(posterior_ss, out1, num.threads=3)
-par_names <- as.character(attr(samp1[[1]]$latent, "dimnames")[[1]])
-post1 <- as.data.frame(sapply(samp1, function(x) x$latent))
-post1$par_names <- par_names
- 
-# tau samples
-tau_samps1 <- post1[grep("tau_i", post1$par_names), ]
-row.names(tau_samps1) <- NULL
-tau_samps1 <- tau_samps1[cells_with_counts, 1:posterior_ss]
-tau_samps1 <- (exp(tau_samps1) - 1) * 100
-tau_samps2 <- cbind(grid2, tau_samps1)
-row.names(tau_samps2) <- NULL
-val_names <- grep("V", names(tau_samps2))
-
-#tau_prov
-tau_prov <- tau_samps2 %>%
-  ungroup() %>%  #this seems to be needed before the select function or it won't work
-  dplyr::select(StateProvince, val_names) %>%
-  mutate(StateProvince=factor(StateProvince)) %>%
-  gather(key=key, val=val, -StateProvince) %>%
-  dplyr::select(-key) %>%
-  group_by(StateProvince) %>%
-  summarise(med_tau=median(val), lcl_tau=quantile(val, probs=0.025),
-            ucl_tau=quantile(val, probs=0.975), iw_tau=ucl_tau-lcl_tau,
-            n=n()/posterior_ss); head(tau_prov)
-tau_prov$taxa_code <- sp.list[m]
-
-#output for SoBC. This is clunky, but clear. 
-tau_prov$results_code<-"OWLS"
-tau_prov$version<-max.yr
-tau_prov$area_code<-"QC"
-tau_prov$species_code<-""
-tau_prov$species_id<-sp.id
-tau_prov$season<-"Breeding"
-tau_prov$period<-"all years"
-tau_prov$years<-paste(min.yr, "-", max.yr, sep="")
-tau_prov$year_start<-min.yr
-tau_prov$year_end<-max.yr
-tau_prov$trnd<-tau_prov$med_tau
-tau_prov$index_type<-""
-tau_prov$upper_ci<-tau_prov$ucl_tau
-tau_prov$lower_ci<-tau_prov$lcl_tau
-tau_prov$stderr<-""
-tau_prov$model_type<-"iCAR Slope"
-tau_prov$model_fit<-""
-
-tau_prov$per<-max.yr-min.yr
-tau_prov$per_trend<-tau_prov$med_tau/100
-tau_prov$percent_change<-((1+tau_prov$per_trend)^tau_prov$per-1)*100
-
-tau_prov$percent_change_low<-""
-tau_prov$percent_change_high<-""
-tau_prov$prob_decrease_0<-""
-tau_prov$prob_decrease_25<-""
-tau_prov$prob_decrease_30<-""
-tau_prov$prob_decrease_50<-""
-tau_prov$prob_increase_0<-""
-tau_prov$prob_increase_33<-""
-tau_prov$prob_increase_100<-""
-tau_prov$confidence<-""
-tau_prov$precision_num<-""
-tau_prov$precision_cat<-ifelse(tau_prov$iw_tau<3.5, "High", ifelse(tau_prov$iw_tau>=3.5 & tau_prov$iw_tau<=6.7, "Medium", "Low"))
-tau_prov$coverage_num<-""
-tau_prov$coverage_cat<-""
-tau_prov$sample_size<-""
-tau_prov$prob_LD<-""
-tau_prov$prob_MD<-""
-tau_prov$prob_LC<-""
-tau_prov$prob_MI<-""
-tau_prov$prob_LI<-""
-
-trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
-
-# Write data to table
-write.table(trend.csv, file = paste(out.dir, 
-                                     "NOS_TrendsSlope", ".csv", sep = ""),
-                  row.names = FALSE, 
-                  append = TRUE, 
-                  quote = FALSE, 
-                  sep = ",", 
-                  col.names = FALSE)
-   
-        
-# alpha samples
-tmp1 <- select(sp.data, species_id, survey_year, count)
-      
-#for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
-      nyears<-max.yr-min.yr+1
-      pred.yr<-matrix(nrow=posterior_ss, ncol=nyears)
-      
-      for (h in 1:posterior_ss){
-        tmp1$pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
-        pred.yr[h,]<-t(with(tmp1, aggregate (pred, list(survey_year), mean, na.action=na.omit))$x)
-        }
-
-mn.yr1<-NULL
-      mn.yr1<-matrix(nrow=nyears, ncol=4)
-      
-      for(g in 1:nyears){
-        mn.yr1[g,1]<-median(pred.yr[,g], na.rm=TRUE)
-        mn.yr1[g,2]<-quantile(pred.yr[,g], 0.025, na.rm=TRUE)
-        mn.yr1[g,3]<-quantile(pred.yr[,g], 0.975, na.rm=TRUE)
-        mn.yr1[g,4]<-sd(pred.yr[,g], na.rm=TRUE)
-      }
   
-mn.yr1 <- as.data.frame(mn.yr1)
-names(mn.yr1) <- c("index", "lower_ci", "upper_ci", "SD")          
-year.list<-(unique(sp.data$survey_year))
-mn.yr1$survey_year<-c(year.list)
+ #grid2<-grid_key %>% filter(alpha_i==cells_with_counts)
+  grid2<-grid_key
+  
+#posterior sample 
+  posterior_ss <- 1000 # change as appropriate
+  samp1 <- inla.posterior.sample(posterior_ss, out1, num.threads=3)
+  par_names <- as.character(attr(samp1[[1]]$latent, "dimnames")[[1]])
+  post1 <- as.data.frame(sapply(samp1, function(x) x$latent))
+  post1$par_names <- par_names
+  
+##-----------------------------------------------------------
+#Provincial Tau
+  #tau samples
+  tau_samps1 <- post1[grep("tau_i", post1$par_names), ]
+  row.names(tau_samps1) <- NULL
+  tau_samps1 <- tau_samps1[cells_with_counts, 1:posterior_ss]
+  tau_samps1 <- (exp(tau_samps1) - 1) * 100
+  tau_samps2 <- cbind(grid2, tau_samps1)
+  row.names(tau_samps2) <- NULL
+  val_names <- grep("V", names(tau_samps2))
+  
+#tau_prov
+  tau_prov <- tau_samps2 %>%
+    ungroup() %>%  #this seems to be needed before the select function or it won't work
+    dplyr::select(province, val_names) %>%
+    mutate(province=factor(province)) %>%
+    gather(key=key, val=val, -province) %>%
+    dplyr::select(-key) %>%
+    group_by(province) %>%
+    summarise(med_tau=median(val), lcl_tau=quantile(val, probs=0.025),
+              ucl_tau=quantile(val, probs=0.975), iw_tau=ucl_tau-lcl_tau,
+              n=dplyr::n()/posterior_ss); head(tau_prov)
+  tau_prov$taxa_code <- sp.list[m]
+  
+#output for SoBC. This is clunky, but clear. 
+  tau_prov <- tau_prov %>% mutate( 
+  results_code="OWLS",
+  version="2023",
+  area_code=tau_prov$province,
+  species_code="",
+  species_id=sp.id,
+  season="Breeding",
+  period="all years",
+  years=paste(min.yr, "-", max.yr, sep=""),
+  year_start=min.yr,
+  year_end=max.yr,
+  trnd=tau_prov$med_tau,
+  index_type="",
+  upper_ci=tau_prov$ucl_tau,
+  lower_ci=tau_prov$lcl_tau,
+  stderr="",
+  model_type="iCAR Slope",
+  model_fit="",
+  percent_change_low="",
+  percent_change_high="",
+  prob_decrease_0="",
+  prob_decrease_25="",
+  prob_decrease_30="",
+  prob_decrease_50="",
+  prob_increase_0="",
+  prob_increase_33="",
+  prob_increase_100="",
+  suitability="",
+  confidence="",
+  precision_num="",
+  precision_cat=ifelse(tau_prov$iw_tau<3.5, "High", ifelse(tau_prov$iw_tau>=3.5 & tau_prov$iw_tau<=6.7, "Medium", "Low")),
+  coverage_num="",
+  coverage_cat="",
+  sample_size=tau_prov$n,
+  sample_size_units="1x1 degree blocks",
+  prob_LD="",
+  prob_MD="",
+  prob_LC="",
+  prob_MI="",
+  prob_LI="")
+  
+  tau_prov$per<-max.yr-min.yr
+  tau_prov$per_trend=tau_prov$med_tau/100
+  tau_prov$percent_change=((1+tau_prov$per_trend)^tau_prov$per-1)*100
+  
+trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+  
+#some cells are assigned to wrong areas. Remove small sample size. 
+  
+  # Write data to table
+  write.table(trend.csv, file = paste(out.dir,
+                                      "NOS_TrendsSlope", ".csv", sep = ""),
+              row.names = FALSE, 
+              append = TRUE, 
+              quote = FALSE, 
+              sep = ",", 
+              col.names = FALSE)
+  
+##___________________________________________________  
+#Provincial Alpha samples
 
-mn.yr1$results_code<-"OWLS"
-mn.yr1$version<-max.yr
-mn.yr1$area_code<-"QC"
-mn.yr1$year<-mn.yr1$survey_year
-mn.yr1$season<-"Breeding"
-mn.yr1$period<-"all years"
-mn.yr1$species_code<-""
-mn.yr1$index<-mn.yr1$index
-mn.yr1$stderr<-""
-mn.yr1$stdev<-mn.yr1$SD
-mn.yr1$upper_ci<-mn.yr1$upper_ci
-mn.yr1$lower_ci<-mn.yr1$lower_ci
-mn.yr1$species_name<-sp
-mn.yr1$species_id<-sp.id
+  tmp2<-NULL
+  tmp2 <- select(sp.data, species_id, survey_year, province, count)
+  
+  #for each sample in the posterior we want to join the predicted to tmp so that the predictions line up year and we can get the mean count by year
+  nyears<-(max.yr-min.yr)+1
+  pred.yr<-matrix(nrow=posterior_ss, ncol=nyears)
+  
+  prov.list<-unique(sp.data$province)
+  
+  for (h in 1:posterior_ss){
+    pred<-exp(samp1[[h]]$latent[1:nrow(sp.data)])
+    tmp2[ncol(tmp2)+1]<-pred
+   }
 
-mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
-mn.yr1$species_sci_name<-mn.yr1$scientific_name
-
-if(nrow(mn.yr1)>=10){
-mn.yr1 <- mn.yr1 %>% mutate(LOESS_index = loess_func(index, year))
-}else{
-  mn.yr1$LOESS_index<-""
-}
-
-mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
-
-write.table(mn.yr1, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
-      
-alpha_samps1 <- post1[grep("alpha_i", post1$par_names), ]
-row.names(alpha_samps1) <- NULL
-alpha_samps1 <- alpha_samps1[cells_with_counts, 1:posterior_ss]
-alpha_samps1 <- exp(alpha_samps1) 
-alpha_samps2 <- cbind(grid2, alpha_samps1)
-row.names(alpha_samps2) <- NULL
-val_names <- grep("V", names(alpha_samps2))
-
-#alpha_prov
-alpha_prov <- alpha_samps2 %>%
-  ungroup() %>%  #this seems to be needed before the select function or it won't work
-  dplyr::select(StateProvince, val_names) %>%
-  mutate(StateProvince=factor(StateProvince)) %>%
-  gather(key=key, val=val, -StateProvince) %>%
-  dplyr::select(-key) %>%
-  group_by(StateProvince) %>%
-  summarise(med_alpha=median(val), lcl_alpha=quantile(val, probs=0.025),
-            ucl_alpha=quantile(val, probs=0.975), iw_alpha=ucl_alpha-lcl_alpha,
-            n=n()/posterior_ss); head(alpha_prov)
-alpha_prov$taxa_code <- sp.list[m]
-
-
+  tmp1<-tmp2 %>% group_by(survey_year, province) %>% summarise_all(mean, na.rm=TRUE)
+  tmp1<-tmp1 %>% rowwise() %>% mutate(index = median(c_across(V5:V1004)), lower_ci=quantile(c_across(V5:V1004), 0.025), upper_ci=quantile(c_across(V5:V1004), 0.975), stdev=sd(c_across(V5:V1004))) 
+  
+  mn.yr1<-NULL
+  mn.yr1<-tmp1 %>% select(survey_year, province, index, lower_ci, upper_ci, stdev) %>% mutate(
+    
+##Provincial 
+  results_code="OWLS",
+  version="2023",
+  season="Breeding",
+  period="all years",
+  species_code="",
+  stderr="",
+  species_name=sp,
+  species_id=sp.id)
+  
+  mn.yr1$area_code<-mn.yr1$province
+  mn.yr1$year=mn.yr1$survey_year
+  
+  mn.yr1<-left_join(mn.yr1, sp.names, by=c("species_id"))
+  mn.yr1$species_sci_name<-mn.yr1$scientific_name
+  
+  #LOESS_index
+  if(nrow(mn.yr1)>=10){
+    mn.yr1 <- mn.yr1 %>% group_by(area_code) %>% mutate(LOESS_index = loess_func(index, year))
+  }else{
+    mn.yr1$LOESS_index<-""
+  }
+  
+  #trend_index
+  mn.yr1$trend_index<-""
+  mn.yr1<-mn.yr1 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+  write.table(mn.yr1, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)      
+  
 ##-----------------------------------------------------------
 #Collect posterior summaries into one data frame
-
-post_sum<-NULL
-post_sum <- data.frame(alpha_i=cells_with_counts,
-                       alph, alph_ll, alph_ul, alph_iw,
-                       #eps, eps_ll, eps_ul, eps_iw, eps_sig=NA,
-                       tau, tau_ll, tau_ul, tau_iw, tau_sig=NA)
-post_sum$tau_sig <- ifelse((post_sum$tau_ll < 1 & post_sum$tau_ul > 1),
-                           post_sum$tau_sig <- 0,
-                           post_sum$tau_sig <- post_sum$tau)
-
-
-#need to back assign the factor alpha_id to its original value
-id_grid<-sp.data %>% ungroup() %>% dplyr::select(alpha_i, id) %>% distinct()
-post_sum<-merge(post_sum, cell_id, by="alpha_i")
-post_sum$taxa_code<-sp
-
-
-#output for SoBC. This is clunky, but clear. 
-tau_cell<-post_sum
-tau_cell$results_code<-"OWLS"
-tau_cell$version<-max.yr
-tau_cell$area_code<-tau_cell$id
-tau_cell$species_code<-""
-tau_cell$species_id<-sp.id
-tau_cell$season<-"Breeding"
-tau_cell$period<-"all years"
-tau_cell$years<-paste(min.yr, "-", max.yr, sep="")
-tau_cell$year_start<-min.yr
-tau_cell$year_end<-max.yr
-tau_cell$trnd<-tau_cell$tau
-tau_cell$index_type<-""
-tau_cell$upper_ci<-tau_cell$tau_ul
-tau_cell$lower_ci<-tau_cell$tau_ll
-tau_cell$stderr<-""
-tau_cell$model_type<-"iCAR Slope"
-tau_cell$model_fit<-""
-
-tau_cell$per<-max.yr-min.yr
-tau_cell$per_trend<-tau_cell$tau/100
-tau_cell$percent_change<-((1+tau_cell$per_trend)^tau_cell$per-1)*100
-
-tau_cell$percent_change_low<-""
-tau_cell$percent_change_high<-""
-tau_cell$prob_decrease_0<-""
-tau_cell$prob_decrease_25<-""
-tau_cell$prob_decrease_30<-""
-tau_cell$prob_decrease_50<-""
-tau_cell$prob_increase_0<-""
-tau_cell$prob_increase_33<-""
-tau_cell$prob_increase_100<-""
-tau_cell$confidence<-""
-tau_cell$precision_num<-""
-tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
-tau_cell$coverage_num<-""
-tau_cell$coverage_cat<-""
-tau_cell$sample_size<-""
-tau_cell$prob_LD<-""
-tau_cell$prob_MD<-""
-tau_cell$prob_LC<-""
-tau_cell$prob_MI<-""
-tau_cell$prob_LI<-""
-
-trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
-
-# Write data to table
-write.table(trend.csv, file = paste(out.dir, 
-                                     "NOS_TrendsSlope", ".csv", sep = ""),
-                  row.names = FALSE, 
-                  append = TRUE, 
-                  quote = FALSE, 
-                  sep = ",", 
-                  col.names = FALSE)
-
-
-write.table(post_sum, paste(out.dir, "PosteriorSummary.csv"), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-
+  
+  alpha_samps1 <- post1[grep("alpha_i", post1$par_names), ]
+  row.names(alpha_samps1) <- NULL
+  alpha_samps1 <- alpha_samps1[cells_with_counts, 1:posterior_ss]
+  alpha_samps1 <- exp(alpha_samps1) 
+  alpha_samps2 <- cbind(grid2, alpha_samps1)
+  row.names(alpha_samps2) <- NULL
+  val_names <- grep("V", names(alpha_samps2))
+  
+  #alpha_prov
+  alpha_prov <- alpha_samps2 %>%
+    ungroup() %>%  #this seems to be needed before the select function or it won't work
+    dplyr::select(province, val_names) %>%
+    mutate(province=factor(province)) %>%
+    gather(key=key, val=val, -province) %>%
+    dplyr::select(-key) %>%
+    group_by(province) %>%
+    summarise(med_alpha=median(val), lcl_alpha=quantile(val, probs=0.025),
+              ucl_alpha=quantile(val, probs=0.975), iw_alpha=ucl_alpha-lcl_alpha,
+              n=dplyr::n()/posterior_ss); head(alpha_prov)
+  alpha_prov$taxa_code <- sp.list[m]
+  
+   write.table(alpha_prov, paste(out.dir, "AlphaProv_Summary.csv", sep=""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  
+  post_sum<-NULL
+  post_sum <- data.frame(alpha_i=cells_with_counts,
+                         alph, alph_ll, alph_ul, alph_iw,
+                         #eps, eps_ll, eps_ul, eps_iw, eps_sig=NA,
+                         tau, tau_ll, tau_ul, tau_iw, tau_sig=NA)
+  post_sum$tau_sig <- ifelse((post_sum$tau_ll < 1 & post_sum$tau_ul > 1),
+                             post_sum$tau_sig <- 0,
+                             post_sum$tau_sig <- post_sum$tau)
+  
+  
+  #Cell specific tau samples
+  #Need to back assign the factor alpha_id to its original value
+  post_sum<-merge(post_sum, cell_id, by="alpha_i")
+  post_sum$taxa_code<-sp
+  
+  #output for SoBC. This is clunky, but clear. 
+  tau_cell<-post_sum %>% mutate(
+  results_code="OWLS",
+  version="2023",
+  area_code=cell_id,
+  species_code="",
+  species_id=sp.id,
+  season="Breeding",
+  period="all years",
+  years=paste(min.yr, "-", max.yr, sep=""),
+  year_start=min.yr,
+  year_end=max.yr,
+  index_type="",
+  stderr="",
+  model_type="iCAR Slope",
+  model_fit="",
+  percent_change_low="",
+  percent_change_high="",
+  prob_decrease_0="",
+  prob_decrease_25="",
+  prob_decrease_30="",
+  prob_decrease_50="",
+  prob_increase_0="",
+  prob_increase_33="",
+  prob_increase_100="",
+  suitability="",
+  confidence="",
+  precision_num="",
+  coverage_num="",
+  coverage_cat="",
+  sample_size="",
+  sample_size_units="",
+  prob_LD="",
+  prob_MD="",
+  prob_LC="",
+  prob_MI="",
+  prob_LI="")
+  
+  tau_cell$trnd<-tau_cell$tau
+  tau_cell$upper_ci<-tau_cell$tau_ul
+  tau_cell$lower_ci<-tau_cell$tau_ll
+  tau_cell$per<-max.yr-min.yr
+  tau_cell$per_trend<-tau_cell$tau/100
+  tau_cell$percent_change=((1+tau_cell$per_trend)^tau_cell$per-1)*100
+  tau_cell$precision_cat<-ifelse(tau_cell$tau_iw<3.5, "High", ifelse(tau_cell$tau_iw>=3.5 & tau_cell$tau_iw<=6.7, "Medium", "Low"))
+  
+trend.csv<-tau_cell %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+  
+  # Write data to table
+  write.table(trend.csv, file = paste(out.dir,
+                                      "NOS_TrendsSlope", ".csv", sep = ""),
+              row.names = FALSE, 
+              append = TRUE, 
+              quote = FALSE, 
+              sep = ",", 
+              col.names = FALSE)
+  
+  
+  write.table(post_sum, paste(out.dir, "PosteriorSummary.csv", sep=""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  
 } # end species analysis loop
 
 ```
 
+```{r plot prov trends}
 
-#Route level analysis using sites that have 10+years of data. 
+# read in trend output
 
-```{r route analysis}
+#add species English and French name
+sp.name<-meta_species_taxonomy()
+sp.name<-sp.name %>% select(species_id, english_name, french_name)
 
-library(maps)
-library(ggplot2)
-library(sf)
-library(terra)
-library(tidyterra) # raster plotting
-library(tidyr)
-library(scales)
-library(dplyr)
-library(tidyverse)
-library(tidyterra)
-library(prettymapr)
+trnd <- read.csv("output/QC/NOS_TrendsSlope.csv")
+trnd<- left_join(trnd, sp.name, by="species_id")
 
-#make need to install the test version to make this work. 
-library(devtools)
-#install.packages("INLA",repos=c(getOption("repos"),INLA="https://inla.r-inla-download.org/R/testing"), dep=TRUE)
-library(INLA)
-library(inlabru)
-library(fmesher)
-library(sp)
-library(reshape)
-library(MatrixModels)
-library(Matrix)
-library(ggspatial)
-library(viridis)
-library(naturecounts)
-library(iemisc)
-library(oce)
+trnd <- trnd %>% drop_na(results_code)
 
-library(mapview)
-library(ggmap) 
-register_stadiamaps("1cdeb586-3f5a-4ef9-813b-02375efa9f21") 
+trnd <- trnd %>% select(species_id, area_code, english_name, french_name, trnd, lower_ci, upper_ci) %>%
+  mutate(sp.trnd = paste(english_name, "/", " \n", french_name, "\n ", round(trnd, digits = 2),  
+                                 " (", round(lower_ci, digits = 2), ", ",
+                                 round(upper_ci, digits = 2), ")"))
+trnd<-trnd %>% select(-trnd, -lower_ci, -upper_ci)
 
-# make a base map
-#canada <- ne_states(country = "canada", returnclass = "sf") %>% st_transform(3347) #st_transform(4326)
-#qc <- filter(canada, name == "Québec")
+# read in annual index output
 
-epsg6703km <- paste(
-  "+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5",
-  "+lat_2=45.5 +x_0=0 +y_0=0 +datum=NAD83",
-  "+units=km +no_defs"
-)
+index <- read.csv(paste("output/QC/NOS_AnnualIndices.csv"))
+index<- left_join(index, sp.name, by="species_id")
 
-#Need to include the "Map.csv" because this includes the UTM which is need for the analysis. 
+index <- index %>%
+  filter(!is.na(results_code)) %>% dplyr::select(index, lower_ci, upper_ci, LOESS_index, trend_index, 
+                species_code, year, area_code, species_id,
+                english_name, french_name)
 
-dat<-read.csv("output/QC_OwlDataClean.csv")
-events<-read.csv("output/QC_Events.csv")
-map<-read.csv("output/QC_Map.csv")
+plot.dat<-NULL
+plot.dat <- full_join(index, trnd, by = c("area_code", "species_id", "english_name", "french_name"), multiple="all")
 
-#map<-map %>% select(RouteIdentifier, Northing, Easting)
-events<-left_join(events, map, by=c("RouteIdentifier", "latitude", "longitude"))
+plot.dat <-plot.dat %>% filter(area_code %in% c("QC")) 
+
+ggplot(data = plot.dat, aes(x = as.numeric(year), y = index)) +
+    facet_wrap(~ sp.trnd, ncol = 2, scales = "free", as.table = TRUE) +
+    geom_pointrange(aes(ymin = lower_ci, ymax = upper_ci)) +
+    geom_smooth(aes(ymin = lower_ci, ymax = upper_ci), method = "loess", alpha = 0.1) + 
+    xlab("Year") +
+    ylab("Annual Index") +
+    scale_shape_manual(values = c(1,2)) +
+    #scale_y_continuous(trans='log10') +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+    theme(legend.position = "none")+
+    theme_classic()+
+    theme(text=element_text(size=20))
+
+```
+
+Plot Tau and Alpha on Grid
+
+```{r plot grid output}
+
+# plot theme
+# map theme
+theme_map <- function(base_size = 9, base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) %+replace%
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_blank(),
+          panel.grid = element_blank(),
+          panel.spacing = unit(0, "lines"),
+          plot.background = element_blank(),
+          legend.background=element_rect(fill=NA, colour=NA),
+          legend.direction="vertical",
+          legend.key=element_rect(fill=NA, colour="white"),
+          legend.text.align=1,
+          legend.text = element_text(size=9),
+          legend.title=element_text(hjust=0, size=11),
+          legend.justification=c(0, 0.5),
+          plot.title = element_text(size=14, hjust = 0.7))
+}
+
+
+#Make Spatial Grid for iCAR Analysis
+test<-events %>% select(latitude, longitude) %>% distinct()
+
+xy<-st_as_sf(test, coords = c("longitude", "latitude"))
+st_crs(xy)<-"+proj=longlat +datum=NAD83"
+
+#all grid for North American
+poly<- read_sf(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="nos_na_grid")
+
+#sf point
+newCRS<-st_crs(poly)
+xy<-st_transform(xy, newCRS)
+
+xy<-st_transform(xy, newCRS) #transform 
+Grid <- poly %>% st_filter(xy, .pred = st_intersects)
+
+qq <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(newCRS) #pull in the background map
+qq<-qq %>% filter(name=="Québec")
+
+
+#Prepare study area map
+
+p1<-ggplot()+ 
+  geom_sf(data=Grid, aes(), size=0.3) +
+  geom_sf(data=xy, aes(), size=1)+
+  geom_sf(data = qq, fill = NA) +
+  theme_map() + theme(panel.grid.major=element_line(colour="transparent"))
+  
+  p1 +
+  ggspatial::annotation_scale(
+    location = "tr",
+    bar_cols = c("black", "white")
+    #text_family = "ArcherPro Book"
+  ) +
+  ggspatial::annotation_north_arrow(
+    location = "tr", which_north = "true",
+    pad_x = unit(0.4, "in"), pad_y = unit(0.4, "in"),
+   # style = ggspatial::north_arrow_nautical(
+    #  fill = c("grey40", "white"),
+    #  line_col = "grey20",
+    #  text_family = "ArcherPro Book"
+    #)
+  )
+
+
+# make cell level maps ---------------------------------------------------------
+
+results_cells <- merge(Grid, pot, by="id", all=F)
+res_sf <- as(results_cells, "sf") 
+
+sp.list<-unique(res_sf$CommonName)
+
+#compile the trend outputs
+pot_est<-trnd <- read.csv("output/QC/PosteriorSummary.csv")
+pot<-pot_est %>% select(alph, tau, id, taxa_code)
+pot<-pot %>% drop_na()
+
+range_grid<-pot %>% group_by(taxa_code) %>% summarise(meanalph=mean(alph), minalph=min(alph), maxalph=max(alph), meantau = mean(tau), mintau = min(tau), maxtau=max(tau))
+write.csv(range_grid, "output/QC/Range_Grid.csv")
+
+tau_R<-pot
+
+for(m in 1:length(sp.list)) {
+  #m<-1 #for testing each species
+  
+    plot.data <-NULL 
+    plot.data <- res_sf %>% filter(CommonName %in% sp.list[m])
+    
+    tau_sp<-NULL
+    tau_sp<-tau_R %>% filter(taxa_code %in% sp.list[m])
+    
+# map tau
+tau_p1 <- ggplot() +
+  geom_sf(data = qq, fill = NA) +
+ # annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data=Grid, aes(), size=0.3) +
+  geom_sf(data=plot.data, aes(fill=tau), col="gray40", size=0.3) +
+  scale_fill_gradient2("Tau\n(% per year)", low = ("red4"),
+  mid = "white",
+  high = ("royalblue4"), midpoint = 0, space = "Lab",
+  na.value = "grey40", guide = "colourbar") +
+  geom_sf(data = qq, fill = NA) +
+  theme_map() + theme(panel.grid.major=element_line(colour="transparent"))
+
+# print cell maps
+ggsave(paste(out.dir, sp.list[m], "TauGridPlot.jpeg"), plot=tau_p1)
+
+
+# map alpha
+alph_p1 <- ggplot() +
+  geom_sf(data=Grid, aes(), size=0.3) +
+# annotation_map_tile(type = "osm", zoomin = 0) +
+  geom_sf(data=plot.data, aes(fill=alph), col="gray40", size=0.3) +
+  scale_fill_gradient2("Alpha", low = "orange", mid = "white",
+                       high = "green4", midpoint = 0, space = "Lab",
+                       na.value = "grey40", guide = "colourbar") +
+  geom_sf(data = qq, fill = NA) +
+  theme_map() + theme(panel.grid.major=element_line(colour="transparent"))
+
+# print cell maps
+ggsave(paste(out.dir, sp.list[m], "AlphaGridPlot.jpeg"), plot=alph_p1)
+
+
+} #end loop
+
+```
+
+#spde analysis 
+
+```{r SPDE analysis}
+
+qq <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km) 
+qq<-qq %>% filter(name=="Québec")
+
+##Min Year and Max Year Filter for National Analysis 
+min.yr<-2008
+max.yr<-2021
+
 
 #Add UTM coords
 UTM<-lonlat2utm( 
-  events$latitude,
-  events$longitude
+ events$longitude,events$latitude
 )
 
 events$Easting<-UTM$easting
 events$Northing<-UTM$northing
 
-events<-events %>% select(SiteCode, RouteIdentifier, survey_year, latitude, longitude, Easting, Northing, bcr)
+events<-events %>% select(SiteCode, RouteIdentifier, survey_year, latitude, longitude, Easting, Northing, protocol_id) %>% distinct()
 
 ##---------------------------------------------------------
 #Set up data for analysis
+dat<-dat %>% dplyr::select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "ObservationCount")
+#sp.list<-unique(dat$CommonName)
 
-dat<-dat %>% dplyr::select("SiteCode", "species_id", "CommonName", "RouteIdentifier", "survey_year", "ObservationCount", "StateProvince")
-
-sp.list<-unique(dat$CommonName)
-max.yr<-max(dat$survey_year)
-min.yr<-min(dat$survey_year)
+#create species list for national assessment
+#sp.list<-c("Barred Owl", "Boreal Owl", "Great Gray Owl", "Great Horned Owl", "Long-eared Owl", "Northern Saw-whet Owl", "Flammulated Owl", "Eastern Screech-Owl")
+sp.list<-c("Boreal Owl", "Barred Owl", "Great Horned Owl", "Northern Saw-whet Owl")
 
 #load species names list
 sp.names<-meta_species_taxonomy()
 sp.names<-sp.names %>% dplyr::select(species_id, english_name, scientific_name)
 
+#if(collection == "ATOWLS"){
+#  events$StateProvince<- "Atlantic"
+#  dat$StateProvince<-"Atlantic"
+#}
+
 ##----------------------------------------------------------
 #Create species analysis loop
 
+
 for(m in 1:length(sp.list)) {
- #m<-1 #for testing each species
-
-if(sp.list[m] != "Boreal Owl") { #do not run if Boreal Owl. To few routes with 10 years of data. 
+  #m<-1 #for testing each species
   
-  sp.data <-NULL 
-  sp.data <- dplyr::filter(dat, CommonName == sp.list[m]) %>%
+    sp.data <-NULL 
+    sp.data <- dplyr::filter(dat, CommonName == sp.list[m]) %>%
       droplevels()
-  sp<-sp.list[m] 
-  sp.id<-unique(sp.data$species_id)
-  
-print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
-
-
-##-----------------------------------------------------------
-#zero fill by merging with the events dataframe. 
-sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
-
-sp.data$CommonName<-sp
-sp.data$species_id<-sp.id
-sp.data$StateProvince<-"QC"
-
-##-----------------------------------------------------------
-#Remove routes that do not have at least one observation of the species
-  
-site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
-site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
-site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
-
-# Limit raw data to these species, i.e., those that were observed at least once on a route 
-sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
-
-##-----------------------------------------------------------
-# Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
-sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, bcr, latitude, longitude, Easting, Northing) %>% summarise(count=sum(ObservationCount))
-
-##-----------------------------------------------------------
-#Create index variables
-sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier))) %>% 
-  group_by(site_idx) %>% 
-  mutate(n_years = dplyr::n()) %>%
-  filter(n_years >= 10) %>% #remove routes with <10 years of data
-  ungroup() %>%
-  mutate(
-    std_yr = survey_year - max.yr,
-    obs = seq_len(nrow(.)),
-    site_idx = as.numeric(factor(paste(RouteIdentifier))),
-    year_idx = as.numeric(factor(survey_year)),
-    site_year_idx = paste0(RouteIdentifier, "-", survey_year)) %>%
-    st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE) %>%
-     st_transform(epsg6703km) %>%
-  mutate(
-    easting = st_coordinates(.)[, 1],
-    northing = st_coordinates(.)[, 2]) %>% 
-    arrange(RouteIdentifier, survey_year)
-
-##----------------------------------------------------------
-# map it
-#ggplot() +
-#  geom_sf(
-#    data = sp.data,  aes(col = count)) +
-#  geom_sf(data = qc, fill = NA) +
-#  coord_sf(datum = NA) +
-#  facet_wrap(~survey_year) +
-#  scale_color_distiller(palette = "Spectral") +
-#  theme_bw()  
-
-##----------------------------------------------------------
-#Make a set of distinct study sites for mapping
-site_map <- sp.data %>%
-  select(RouteIdentifier, easting, northing) %>%
-  distinct() %>%
-  select(RouteIdentifier, easting, northing)
-
-##-----------------------------------------------------------
-#Make a set of distinct study sites for mapping    
-#Make a two extension hulls and mesh for spatial model
-
-#sp.data<-as.matrix(sp.data)  
-hull <- fm_extensions(
-  sp.data,
-  convex = c(20, 50),
-  concave = c(35, 50)
-)
-
-#mesh <- fm_mesh_2d_inla(
-#  boundary = hull, max.edge = c(100, 120), # km inside and outside
-#  cutoff = 0, #offset = c(100, 300), #set cutoff to one to place point in vertex
-#  crs = fm_crs(sp.data)
-#) # cutoff is min edge
-
-# plot it
-#meshmap1<-ggplot() +
-#  gg(data = mesh) +
-#  geom_sf(data = site_map, col = "darkgreen", size = 1) +
-#  geom_sf(data = qc, fill = NA) +
-#  theme_bw() +
-#  labs(x = "", y = "")  
-
-#make the mesh this way so that the point fall on the vertices of the lattice
-Loc<-site_map%>% select(easting, northing) %>% 
-    st_drop_geometry() %>% as.matrix()
-
-mesh2<-fm_mesh_2d_inla(Loc, 
-#mesh2<-inla.mesh.2d(Loc, 
-  boundary = hull,
-  max.edge = c(50, 200), # km inside and outside
-  cutoff = 0,
-  crs = fm_crs(sp.data))
-
-# plot it 2
-#meshmap2<-ggplot() +
-#  gg(data = mesh2) +
-#  geom_sf(data = site_map, col = "darkgreen", size = 1) +
-#  geom_sf(data = qc, fill = NA) +
-#  theme_bw() +
-#  labs(x = "", y = "")  
-
-spde <- inla.spde2.pcmatern(  # pg 218 this formula should include an alpha, default is 2 if the model does not include times. 
-  mesh = mesh2,
-  prior.range = c(500, 0.5),
-  prior.sigma = c(1, 0.5)
-)
-
-##-----------------------------------------------------------
-#Model Formula
-
-# iid prior
-pc_prec <- list(prior = "pcprec", param = c(1, 0.1))
-
-# components
-svc_components <- ~ -1 +
-  kappa(site_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
-  alpha(geometry, model = spde) +
-  tau(geometry, weights = std_yr, model = spde)+
-# route-year effect
-  gamma(site_year_idx, model="iid", constr=TRUE, hyper = list(prec = pc_prec)) 
-  
-# formula, with "." meaning "add all the model components":
-svc_formula <- count ~ .
-
-#Run Model
-res <- bru(
-  svc_components,
-  like(
-    formula = svc_formula,
-    family = "nbinomial",
-    data = sp.data
-  ),
-  options = list(
-    control.compute = list(waic = TRUE, cpo = FALSE),
-    control.inla = list(int.strategy = "eb"),
-    verbose = FALSE
-  )
-)
-
-res$summary.hyperpar[-1, c(1, 2)]
-
-summary(exp(res$summary.random$alp$"0.5quant")) # exp(alpha) posterior median
-summary((exp(res$summary.random$tau$"0.5quant") - 1) * 100) # (exp(tau)-1)*100
-
-#SVC Map
-# get easting and northing limits
-bbox <- fm_bbox(hull[[1]])
-grd_dims <- round(c(x = diff(bbox[[1]]), y = diff(bbox[[2]])) / 25)
-
-#bbox <- fm_bbox(mesh2$loc)
-#grd_dims <- round(c(x = diff(bbox[[1]]), y = #diff(bbox[[2]])))
-
-# make mesh projector to get model summaries from the mesh to the mapping grid
-mesh_proj <- fm_evaluator(mesh2,
-  xlim = bbox[[1]], ylim = bbox[[2]], dims = grd_dims
-)
-
-#mesh_proj<-inla.mesh.projector(mesh2, #xlim=range(Loc[,1]), ylim=range(Loc[,2]), #dims=grd_dims)
-
-#Pull data
-kappa <- data.frame(
-  median = exp(res$summary.random$kappa$"0.5quant"),
-  range95 = exp(res$summary.random$kappa$"0.975quant") -
-    exp(res$summary.random$kappa$"0.025quant")
-)
-
-alph <- data.frame(
-  median = exp(res$summary.random$alpha$"0.5quant"),
-  range95 = exp(res$summary.random$alpha$"0.975quant") -
-    exp(res$summary.random$alpha$"0.025quant")
-)
-
-taus <- data.frame(
-  median = (exp(res$summary.random$tau$"0.5quant") - 1) * 100,
-  range95 = (exp(res$summary.random$tau$"0.975quant") -
-    exp(res$summary.random$tau$"0.025quant")) * 100
-)
-
-# loop to get estimates on a mapping grid
-pred_grids <- lapply(
-  list(alpha = alph, tau = taus),
-  function(x) as.matrix(fm_evaluate(mesh_proj, x))
-)
-
-##-----------------------------------------------------------
-#Create plot functions
-
-make_plot_field <- function(data_stk, scale_label) {
-  ggplot() +
-    annotation_map_tile(type = "osm", zoomin = 0) +
-    geom_sf(fill = NA) +
-    coord_sf(datum = NA) +
-    geom_spatraster(data = data_stk) +
-    labs(x = "", y = "") +
-    scale_fill_viridis(option="magma", scale_label, na.value="transparent")+
-    #scale_fill_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
-    theme_bw() +
-    geom_sf(fill = NA)
-}
-
-make_plot_site <- function(data, scale_label) {
-  ggplot() +
-    annotation_map_tile(type = "osm", zoomin = 0) +
-    geom_sf() +
-    coord_sf(datum = NA) +
-    geom_sf(data = data, size = 5, mapping = aes(colour = value)) +
-    labs(x = "", y = "") +
-    scale_colour_viridis(option="magma", scale_label, na.value="transparent")+
-    #scale_colour_distiller(scale_label, palette = "Blue-Red", na.value = "transparent") +
-    theme_bw() +
-    geom_sf(fill = NA)
-}
-
-##-----------------------------------------------------------
-# make a terra raster stack with the posterior median and range95
-out_stk <- rast()
-for (j in 1:2) {
-  mean_j <- cbind(expand.grid(x = mesh_proj$x, y = mesh_proj$y),
-    Z = c(matrix(pred_grids[[j]][, 1], grd_dims[1]))
-  )
-  mean_j <- rast(mean_j, crs = epsg6703km)
-  range95_j <- cbind(expand.grid(X = mesh_proj$x, Y = mesh_proj$y),
-    Z = c(matrix(pred_grids[[j]][, 2], grd_dims[1]))
-  )
-  range95_j <- rast(range95_j, crs = epsg6703km)
-  out_j <- c(mean_j, range95_j)
-  terra::add(out_stk) <- out_j
-}
-
-names(out_stk) <- c("alpha_median", "alpha_range95", "tau_median", "tau_range95")
-
-canada <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(epsg6703km ) 
-qc <- filter(canada, name == "Québec")
-
-out_stk <- terra::mask(out_stk, qc, touches = FALSE)
-
-##-----------------------------------------------------------
-# medians
-# fields alpha_s, tau_s
-pa <- make_plot_field(
-  data_stk = out_stk[["alpha_median"]],
-  scale_label = "posterior\nmedian\nexp(alpha_s)"
-)
-
-pt <- make_plot_field(
-  data_stk = out_stk[["tau_median"]],
-  scale_label = "posterior\nmedian\n100(exp(tau_s)-1)"
-)
-# sites kappa_s
-ps <- make_plot_site(
-  data = cbind(site_map, data.frame(value = kappa$median)),
-  scale_label = "posterior\nmedian\nexp(kappa_s)"
-)
-# range95
-# fields alpha_s, tau_s
-pa_range95 <- make_plot_field(
-  data_stk = out_stk[["alpha_range95"]],
-  scale_label = "posterior\nrange95\nexp(alpha_s)"
-)
-
-pt_range95 <- make_plot_field(
-  data_stk = out_stk[["tau_range95"]],
-  scale_label = "posterior\nrange95\n100(exp(tau_s)-1)"
-)
-
-# sites kappa_s
-ps_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = kappa$range95)),
-  scale_label = "posterior\nrange95\nexp(kappa_s)"
-)
-
-# plot together
-#multiplot(ps, pa, pt, cols = 2)
-
-# plot together
-#multiplot(ps_range95, pa_range95, pt_range95, cols = 2)
-
-# plot together
-multiplot(ps, pa, pt, ps_range95, pa_range95, pt_range95, cols = 2)
-
-
-#___________________________________________________
-#Predict the SPDE and covariates at the vertex locations
-
-vertices<-fmesher::fm_vertices(mesh2)
-
-# predict on the vertices
-pred <- predict(
-  res,
-  vertices)
-
-alph_filter <- pred$alpha
-alph_filter<-alph_filter %>% filter(geometry %in% site_map$geometry)
-
-alph_median <- data.frame(
-  geometry=alph_filter$geometry,
-  median = exp(alph_filter$"q0.5"))
-
-alph_range <- data.frame(
-  geometry=alph_filter$geometry,
-  range95 = exp(alph_filter$"q0.975") -
-    exp(alph_filter$"q0.025")
-)
-
-# sites alph_s
-pa2 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = alph_median$median)),
-  scale_label = "posterior\nmedian\nexp(alph_s)"
-)
-
-# range95  alpha_s
-pa2_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = alph_range$range95)), 
-  scale_label = "posterior\nrange95\nexp(alpha_s)"
-)
-
-tau_filter <- pred$tau
-tau_filter<-tau_filter %>% filter(geometry %in% site_map$geometry)
-
-tau_median <- data.frame(
-  geometry=tau_filter$geometry,
-  median = (exp(tau_filter$"q0.5") -1)*100)
-
-tau_lci <- data.frame(
-  geometry=tau_filter$geometry,
-  tau_ll = (exp(tau_filter$"q0.025") -1)*100)
-
-tau_uci <- data.frame(
-  geometry=tau_filter$geometry,
-  tau_ul = (exp(tau_filter$"q0.975") -1)*100)
-
-tau_range <- data.frame(
-  geometry=tau_filter$geometry,
-  range95 = (exp(tau_filter$"q0.975") -
-    exp(tau_filter$"q0.025")) *100)
-
-# sites tau_s
-pt2 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = tau_median$median)),
-  scale_label = "posterior\nmedian\n100(exp(tau_s)-1)"
-)
-
-# range95  tau_s
-pt2_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = tau_range$range95)), 
-  scale_label = "posterior\nrange95\n100(exp(tau_s)-1)"
-)
-
-# sites kappa_s
-ps <- make_plot_site(
-  data = cbind(site_map, data.frame(value = kappa$median)),
-  scale_label = "posterior\nmedian\nexp(kappa_s)"
-)
-
-# sites kappa_s
-ps_range95 <- make_plot_site(
-  data = cbind(site_map, data.frame(value = kappa$range95)),
-  scale_label = "posterior\nrange95\nexp(kappa_s)"
-)
-
-# plot together
-multiplot(ps, pa2, pt2, ps_range95, pa2_range95, pt2_range95, cols = 2)
-
-multiplot(pa, pt, pa2, pt2, cols=2)
-
-multiplot(pa2, pt2)
-
-##-----------------------------------------------------------
-#Print route level trends to file
-#output for SoBC. This is clunky, but clear.
-
-tau_route<-data.frame(
-  tau=tau_median$median, 
-  lower_ci=tau_lci$tau_ll,
-  upper_ci=tau_uci$tau_ul,
-  tau_wi=tau_range$range95,
-  sd=tau_filter$sd,
-  geometry=tau_filter$geometry)
-
-coord<-st_coordinates(tau_filter$geometry)
-tau_route<-cbind(tau_route, coord)
-tau_route<-tau_route %>% dplyr::rename(easting = X, northing = Y)
-
-##HERE
-tau_route<-merge(tau_route, site_map, c("easting", "northing"))
-
-tau_route$results_code<-"OWLS"
-tau_route$version<-max.yr
-tau_route$area_code<-tau_route$RouteIdentifier
-tau_route$species_code<-""
-tau_route$species_id<-sp.id
-tau_route$season<-"Breeding"
-tau_route$period<-"all years"
-tau_route$years<-paste(min.yr, "-", max.yr, sep="")
-tau_route$year_start<-min.yr
-tau_route$year_end<-max.yr
-tau_route$trnd<-tau_route$tau
-tau_route$index_type<-""
-tau_route$stderr<-""
-tau_route$model_type<-"SPDE"
-tau_route$model_fit<-""
-
-tau_route$per<-max.yr-min.yr
-tau_route$per_trend<-tau_route$tau/100
-tau_route$percent_change<-((1+tau_route$per_trend)^tau_route$per-1)*100
-
-tau_route$percent_change_low<-""
-tau_route$percent_change_high<-""
-tau_route$prob_decrease_0<-""
-tau_route$prob_decrease_25<-""
-tau_route$prob_decrease_30<-""
-tau_route$prob_decrease_50<-""
-tau_route$prob_increase_0<-""
-tau_route$prob_increase_33<-""
-tau_route$prob_increase_100<-""
-tau_route$confidence<-""
-tau_route$precision_num<-""
-tau_route$precision_cat<-ifelse(tau_route$tau_wi<3.5, "High", ifelse(tau_route$tau_wi>=3.5 & tau_route$tau_wi<=6.7, "Medium", "Low"))
-tau_route$coverage_num<-""
-tau_route$coverage_cat<-""
-tau_route$sample_size<-""
-tau_route$prob_LD<-""
-tau_route$prob_MD<-""
-tau_route$prob_LC<-""
-tau_route$prob_MI<-""
-tau_route$prob_LI<-""
-
-trend.csv<-tau_route %>% select(results_code,	version,	area_code,	species_code,	species_id,	season,	period,	years,	year_start,	year_end,	trnd,	index_type,	upper_ci, lower_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100,	confidence,	precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size,	prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
-
-# Write data to table
-write.table(trend.csv, file = paste(out.dir, 
-                                     "NOS_TrendsSlope", ".csv", sep = ""),
-                  row.names = FALSE, 
-                  append = TRUE, 
-                  quote = FALSE, 
-                  sep = ",", 
-                  col.names = FALSE)
-
-##-----------------------------------------------------------
-#time series plots per route
-#calculate route level index of abundance
-
-#create a loop to get abundance index output per route-year
-
-##Remove cells with no routes
-routes_with_counts <- unique(sp.data$RouteIdentifier[which(!is.na(sp.data$count))])
-
-for(k in 1:length(routes_with_counts)) {
-
-#k<-1 #for testing each cell
+    sp<-sp.list[m] 
+    sp.id<-unique(sp.data$species_id)
+    
+    print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
+    
+    ##-----------------------------------------------------------
+    #zero fill by merging with the events dataframe. 
+    sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
+    
+    sp.data$CommonName<-sp
+    sp.data$species_id<-sp.id
+    #sp.data$StateProvince<-StateProv
+    
+    ##-----------------------------------------------------------
+    #Remove routes that do not have at least one observation of the species
+    site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
+    site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
+    site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
+    
+    # Limit raw data to these species, i.e., those that were observed at least once on a route 
+    sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
+    
+    ##-----------------------------------------------------------
+    #Remove 2020 due to COVID
+    sp.data<-sp.data %>% filter(survey_year!=2020)
+    sp.data<-sp.data %>% filter(survey_year!=2021)
+    sp.data$StateProvince<-"QC"
+    
+    ##-----------------------------------------------------------
+    # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
+    sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, latitude, longitude, Easting, Northing, protocol_id) %>% summarise(count=sum(ObservationCount))
+    sp.data$StateProvince<-"QC"
+    
+    ##-----------------------------------------------------------
+    #Create index variables
+    sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier))) %>% 
+      group_by(site_idx) %>% 
+      mutate(n_years = dplyr::n()) %>%
+    #  filter(n_years >= 10) %>% #remove routes with <10 years of data
+      ungroup() %>%
+      mutate(
+        std_yr = survey_year - max.yr,
+        obs = seq_len(nrow(.)),
+        site_idx = as.numeric(factor(paste(RouteIdentifier))),
+       # stops = nstop,
+        year_idx = as.numeric(factor(survey_year)),
+        site_year_idx = paste0(RouteIdentifier, "-", survey_year)) %>% 
+      st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE) %>%
+      st_transform(epsg6703km) %>%
+     mutate(
+        easting = st_coordinates(.)[, 1],
+        northing = st_coordinates(.)[, 2]) %>% 
+      arrange(RouteIdentifier, survey_year)
+    
+    #nroute$nroute<-n_distinct(sp.data$RouteIdentifier)
+    #nroute$CommonName<-sp
+    #nroute<-as.data.frame(nroute)
+    
+     # write.table(nroute, paste(out.dir, "nroute_Summary.csv", sep=""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    
+    #Make a set of distinct study sites for mapping
+    site_map <- sp.data %>%
+      select(RouteIdentifier, easting, northing) %>%
+      distinct() %>%
+      select(RouteIdentifier, easting, northing)
+    
+    sampleplot<-ggplot() +
+      geom_sf(data = sp.data, aes(col = count)) +
+      geom_sf(data = qq, fill = NA) +
+      coord_sf(datum = NA) +
+      #facet_wrap(~survey_year) +
+      scale_color_distiller(palette = "Spectral") +
+      theme_bw()  
+    
+  # pdf(paste(out.dir, sp.list[m], "_SamplePlot.pdf", sep=""))
+  #  plot(sampleplot)
+  #  while(!is.null(dev.list())) dev.off()
+    
+    ##-----------------------------------------------------------
+    #Make a set of distinct study sites for mapping    
+    #Make a two extension hulls and mesh for spatial model
+    
+    #sp.data<-as.matrix(sp.data)  
+    hull <- fm_extensions(
+      sp.data,
+      convex = c(20, 50),
+      concave = c(35, 50)
+    )
+    
+   #make the mesh this way so that the point fall on the vertices of the lattice
+   Loc<-site_map%>% select(easting, northing) %>% 
+   st_drop_geometry() %>% as.matrix()
+
+
+###################################################################
+  mesh2<-fm_mesh_2d_inla(Loc, 
+                           #mesh2<-inla.mesh.2d(Loc, 
+                           boundary = hull,
+                           max.edge = c(50, 200), # km inside and outside
+                           cutoff = 0,
+                           crs = fm_crs(sp.data))
    
-  route1 <-NULL 
-  route1 <- routes_with_counts[k]
-  
-#need to back assign the factor route1 to its original grid_id
-route_id<-sp.data %>% ungroup() %>% dplyr::select(RouteIdentifier, geometry) %>% distinct()
+      spde <- inla.spde2.pcmatern(  # pg 218 this formula should include an alpha, default is 2 if the model does not include times. 
+      mesh = mesh2,
+      prior.range = c(500, 0.5),
+      prior.sigma = c(1, 0.5)
+    )
 
-#join the route_id table to the vertices so that we know the features ID. 
-vertices<-fmesher::fm_vertices(mesh2)
-grid0<-st_join(route_id, vertices, by=geometry)
-grid0<-as.data.frame(grid0)
-grid0<-grid0 %>% select(RouteIdentifier, .vertex)
-grid1<- as.integer(grid0[k,".vertex"])
+      # plot mesh and save to file
+meshmap2<-ggplot() +
+  gg(data = mesh2) +
+  geom_sf(data = qq, fill = NA) +
+  geom_sf(data = site_map, col = "black", size = 1) +
+  theme_map() + theme(panel.grid.major=element_line(colour="transparent"))  
 
-#median 
- 
-#######   
-   d0 <- res$summary.random$alpha$`0.5quant`[grid1]
-   d1 <- res$summary.random$tau$`0.5quant`[grid1]
-   d2 <- data.frame(
-   styear=as.numeric(gsub(paste0(route1,"-"), "",
-                        grep(paste0("\\b",route1,"-"),
-                             res$summary.random$gamma$ID,
-                                  value=TRUE)))- max.yr, gamma=
-     res$summary.random$gamma$`0.5quant`[grep(
-       paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
-     arrange(styear)
-   d2$x0 <- d0
-   d2$x1 <- d2$styear*d1
-   d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma)
-   d2$grid<-grid1
-   d2$RouteIdentifier<-route1
-   d2$species_code<-sp
-   d2$survey_year<-d2$styear+max.yr
+pdf(paste(out.dir, sp, "_MeshPlot.pdf", sep=""))
+plot(meshmap2)
+while(!is.null(dev.list())) dev.off()
+
+          
+    ##-----------------------------------------------------------
+    #Model Formula
+    
+    # iid prior
+    pc_prec <- list(prior = "pcprec", param = c(1, 0.1))
+    
+    # components
+    svc_components <- ~ -1 + 
+      kappa(site_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+      #ellip(stops, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+      alpha(geometry, model = spde) +
+      tau(geometry, weights = std_yr, model = spde)+
+      # route-year effect
+      gamma(site_year_idx, model="iid", constr=TRUE, hyper = list(prec = pc_prec)) 
+    
+    # formula, with "." meaning "add all the model components":
+    svc_formula <- count ~ .
+    
+    if(sp=="Great Horned Owl"){
+    fam<-"poisson" 
+  }else{
+    fam<-"nbinomial"
+  }
+    
+    #Run Model
+    res <- bru(
+      svc_components,
+      like(
+        formula = svc_formula,
+        family = fam,
+        data = sp.data
+         ),
+      options = list(
+        control.compute = list(waic = TRUE, cpo = FALSE),
+        control.inla = list(int.strategy = "eb"),
+        verbose = FALSE
+      )
+    )
+    
+    res$summary.hyperpar[-1, c(1, 2)]
+    summary(exp(res$summary.random$alp$"0.5quant")) # exp(alpha) posterior median
+    summary((exp(res$summary.random$tau$"0.5quant") - 1) * 100) # (exp(tau)-1)*100
+    
+    #SVC Map
+    #get easting and northing limits
+    bbox <- fm_bbox(hull[[1]])
+    grd_dims <- round(c(x = diff(bbox[[1]]), y = diff(bbox[[2]])) / 25)
+    
+    #bbox <- fm_bbox(mesh2$loc)
+    #grd_dims <- round(c(x = diff(bbox[[1]]), y = #diff(bbox[[2]])))
+    
+    # make mesh projector to get model summaries from the mesh to the mapping grid
+    mesh_proj <- fm_evaluator(mesh2,
+                              xlim = bbox[[1]], ylim = bbox[[2]], dims = grd_dims
+    )
+    
+    #mesh_proj<-inla.mesh.projector(mesh2, #xlim=range(Loc[,1]), ylim=range(Loc[,2]), #dims=grd_dims)
+    
+    #Pull data
+    kappa <- data.frame(
+      median = exp(res$summary.random$kappa$"0.5quant"),
+      range95 = exp(res$summary.random$kappa$"0.975quant") -
+        exp(res$summary.random$kappa$"0.025quant")
+    )
+    
+    alph <- data.frame(
+      median = exp(res$summary.random$alpha$"0.5quant"),
+      range95 = exp(res$summary.random$alpha$"0.975quant") -
+        exp(res$summary.random$alpha$"0.025quant")
+    )
+    
+    taus <- data.frame(
+      median = (exp(res$summary.random$tau$"0.5quant") - 1) * 100,
+      range95 = (exp(res$summary.random$tau$"0.975quant") -
+                   exp(res$summary.random$tau$"0.025quant")) * 100
+    )
+    
+    # loop to get estimates on a mapping grid
+    pred_grids <- lapply(
+      list(alpha = alph, tau = taus),
+      function(x) as.matrix(fm_evaluate(mesh_proj, x))
+    )
+    
+      ##-----------------------------------------------------------
+    # make a terra raster stack with the posterior median and range95
+    out_stk <- rast()
+    for (j in 1:2) {
+      mean_j <- cbind(expand.grid(x = mesh_proj$x, y = mesh_proj$y),
+                      Z = c(matrix(pred_grids[[j]][, 1], grd_dims[1]))
+      )
+      mean_j <- rast(mean_j, crs = epsg6703km)
+      range95_j <- cbind(expand.grid(X = mesh_proj$x, Y = mesh_proj$y),
+                         Z = c(matrix(pred_grids[[j]][, 2], grd_dims[1]))
+      )
+      range95_j <- rast(range95_j, crs = epsg6703km)
+      out_j <- c(mean_j, range95_j)
+      terra::add(out_stk) <- out_j
+    }
+    
+    names(out_stk) <- c("alpha_median", "alpha_range95", "tau_median", "tau_range95")
+    out_stk <- terra::mask(out_stk, qq, touches = FALSE)
+    
+    ##-----------------------------------------------------------
+     # medians
+    # fields alpha_s, tau_s
+    pa <- make_plot_field(
+      data_stk = out_stk[["alpha_median"]],
+      scale_label = "posterior\nmedian\nalpha"
+    )
+    
+    pt <- make_plot_field(
+      data_stk = out_stk[["tau_median"]],
+      scale_label = "posterior\nmedian\ntau"
+    )
+    # sites kappa_s
+    ps <- make_plot_site(
+      data = cbind(site_map, data.frame(value = kappa$median)),
+      scale_label = "posterior\nmedian\nkappa"
+    )
+    # range95
+    # fields alpha_s, tau_s
+    pa_range95 <- make_plot_field(
+      data_stk = out_stk[["alpha_range95"]],
+      scale_label = "posterior\nrange95\nexp(alpha_s)"
+    )
+    
+    pt_range95 <- make_plot_field(
+      data_stk = out_stk[["tau_range95"]],
+      scale_label = "posterior\nrange95\n100(exp(tau_s)-1)"
+    )
+    
+    # sites kappa_s
+    ps_range95 <- make_plot_site(
+      data = cbind(site_map, data.frame(value = kappa$range95)),
+      scale_label = "posterior\nrange95\nexp(kappa_s)"
+    )
+    
+    # plot together
+    #multiplot(ps, pa, pt, cols = 2)
+    
+    # plot together
+    #multiplot(ps_range95, pa_range95, pt_range95, cols = 2)
+    
+    # plot together
+    #multiplot(ps, pa, pt, ps_range95, pa_range95, pt_range95, cols = 2)
+    
+    pdf(paste(out.dir, sp.list[m], "_spdePlot.pdf", sep=""))
+    multiplot(pa, pt)
+    while(!is.null(dev.list())) dev.off()
+    
+        #___________________________________________________
+    #Predict the SPDE and covariates at the vertex locations
+    
+    vertices<-fmesher::fm_vertices(mesh2)
+    
+    # predict on the vertices
+    pred <- predict(
+      res,
+      vertices, 
+      n.samples = 10000)
+    
+    alph_filter <- pred$alpha
+    alph_filter<-alph_filter %>% filter(geometry %in% site_map$geometry)
+    
+    alph_median <- data.frame(
+      geometry=alph_filter$geometry,
+      median = exp(alph_filter$"q0.5"))
+    
+    #alph_median<-left_join(alph_median, site_map, by="geometry")
+    
+    alph_range <- data.frame(
+      geometry=alph_filter$geometry,
+      range95 = exp(alph_filter$"q0.975") -
+        exp(alph_filter$"q0.025")
+    )
+    
+   # alph_range<-left_join(alph_range, site_map, by="geometry")
+    
+   # sites alph_s
+   # sites alph_s
+    pa2 <- make_plot_site(
+      data = data.frame(value = alph_median$median, geometry=alph_median$geometry),
+      scale_label = "posterior\nmedian\nalph"
+    )
+    
+    # range95  alpha_s
+   pa2_range95 <- make_plot_site(
+      data = data.frame(value =alph_range$range, geometry=alph_range$geometry), 
+      scale_label = "posterior\nrange95\nalpha"
+    )
+    
+    tau_filter <- pred$tau
+    tau_filter<-tau_filter %>% filter(geometry %in% site_map$geometry)
+    
+    tau_median <- data.frame(
+      geometry=tau_filter$geometry,
+      median = (exp(tau_filter$"q0.5") -1)*100)
+    
+    tau_lci <- data.frame(
+      geometry=tau_filter$geometry,
+      tau_ll = (exp(tau_filter$"q0.025") -1)*100)
+    
+    tau_uci <- data.frame(
+      geometry=tau_filter$geometry,
+      tau_ul = (exp(tau_filter$"q0.975") -1)*100)
+    
+    tau_range <- data.frame(
+      geometry=tau_filter$geometry,
+      range95 = (exp(tau_filter$"q0.975") -
+                   exp(tau_filter$"q0.025")) *100)
+    
+  # tau_median<-left_join(tau_median, site_map, by="geometry")
+  #  tau_range<-left_join(tau_range, site_map, by="geometry")
+  #  tau_lci<-left_join(tau_lci, site_map, by="geometry")
+  #  tau_uci<-left_join(tau_uci, site_map, by="geometry")
+     
+    # sites tau_s
+    pt2 <- make_plot_site(
+      data = data.frame(value =tau_median$median, geometry=tau_median$geometry),
+      scale_label = "posterior\nmedian\ntau"
+    )
+    
+        # range95  tau_s
+    pt2_range95 <- make_plot_site(
+      data = data.frame(value =tau_range$range), 
+      scale_label = "posterior\nrange95\ntau"
+    )
+
+    # sites kappa_s
+    ps <- make_plot_site(
+      data = cbind(site_map, data.frame(value = kappa$median)),
+      scale_label = "posterior\nmedian\nkappa"
+    )
+    
+    # sites kappa_s
+    ps_range95 <- make_plot_site(
+      data = cbind(site_map, data.frame(value = kappa$range95)),
+      scale_label = "posterior\nrange95\nkappa"
+    )
+    
+    # plot together
+    #multiplot(ps, pa2, pt2, ps_range95, pa2_range95, pt2_range95, cols = 2)
+    #multiplot(pa, pt, pa2, pt2, cols=2)
+    
+    pdf(paste(out.dir, sp.list[m], "_spdeRoutePlot.pdf", sep=""))
+    multiplot(pa2, pt2)
+    while(!is.null(dev.list())) dev.off()
+    
+    
+    #Model fit
+    #valid<-NULL
+    #valid<-sp.data %>% select(RouteIdentifier, survey_year, std_yr, geometry, count)
    
-   d2<-d2 %>% select(-gamma, -x0, -x1)
-   
-#lci     
-   l0 <- res$summary.random$alpha$`0.025quant`[grid1]
-   l1 <- res$summary.random$tau$`0.025quant`[grid1]
-   l2 <- data.frame(
-   styear=as.numeric(gsub(paste0(route1,"-"), "",
-                        grep(paste0("\\b",route1,"-"),
-                             res$summary.random$gamma$ID,
-                                  value=TRUE)))- max.yr, gamma=
-     res$summary.random$gamma$`0.025quant`[grep(
-       paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
-     arrange(styear)
-   l2$x0 <- l0
-   l2$x1 <- l2$styear*l1
-   l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma)
-   l2$grid<-grid1
-   
-   l2<-l2 %>% select(-gamma, -x0, -x1)
-
-   
-#uci  
-   u0 <- res$summary.random$alpha$`0.975quant`[grid1]
-   u1 <- res$summary.random$tau$`0.975quant`[grid1]
-   u2 <- data.frame(
-   styear=as.numeric(gsub(paste0(route1,"-"), "",
-                        grep(paste0("\\b",route1,"-"),
-                             res$summary.random$gamma$ID,
-                                  value=TRUE)))- max.yr, gamma=
-     res$summary.random$gamma$`0.975quant`[grep(
-       paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
-     arrange(styear)
-   u2$x0 <- u0
-   u2$x1 <- u2$styear*u1
-   u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma)
-   u2$grid<-grid1
-   
-   u2<-u2 %>% select(-gamma, -x0, -x1)
- 
-  
-#######  
-
-d3<-NULL   
-d3<-merge(d2, l2, by=c("grid", "styear"))
-d3<-merge(d3, u2, by=c("grid", "styear"))
-
-d3$index<-d3$abund
-d3$upper_ci<-d3$abund_uci
-d3$lower_ci<-d3$abund_lci
-d3$year<-d3$styear+max.yr
-d3$results_code<-"OWLS"
-d3$version<-max.yr
-d3$area_code<-d3$RouteIdentifier
-d3$season<-"Breeding"
-d3$period<-"all years"
-d3$stderr<-""
-d3$stdev<-""
-d3$species_id<-sp.id
-d3<-left_join(d3, sp.names, by=c("species_id"))
-d3$species_sci_name<-d3$scientific_name
-d3$species_name<-d3$species_code
-d3$species_code<-""
-
-
-if(nrow(d3)>=10){
-d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
-}else{
-  d3$LOESS_index<-""
-}
-
-d3<-d3 %>% select(results_code, version, area_code, year,season, period, species_code, species_id, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, species_name, species_sci_name)
+    #gamma_filter <- pred$gamma %>% select(mean) %>% st_drop_geometry() 
+    #valid$gamma<-gamma_filter
+    
+    #kappa_filter <- pred$kappa %>% select(mean) %>% st_drop_geometry() 
+    
+    #a<-alph_filter %>% select(mean, geometry) %>% dplyr::rename(alph = mean) 
+    #a$kappa<-kappa_filter
+    #valid<-st_join(valid, a, by="geometry")
+    
+    #t<-tau_filter %>% select(mean, geometry) %>% dplyr::rename(tau = mean)  
+    #valid<-st_join(valid, t, by="geometry")
+    
+    #valid<-valid %>% mutate(X1 = tau*std_yr, gamma=gamma$mean, kappa=kappa$mean) %>% st_drop_geometry() 
+    #valid<-valid %>% mutate(pred_count=alph+X1+gamma+kappa)
+    
+    #plot(valid$count, valid$pred_count)
+    
+    ##-----------------------------------------------------------
+    #Print route level trends to file
+    #output for SoBC. This is clunky, but clear.
+    
+    
+    tau_route<-NULL
+     tau_route<-data.frame(
+      tau=tau_median$median, 
+      lower_ci=tau_lci$tau_ll,
+      upper_ci=tau_uci$tau_ul,
+      tau_wi=tau_range$range95,
+      sd=tau_filter$sd,
+      geometry=tau_range$geometry)
+     
+    alph_route<-NULL 
+     alph_route<-data.frame(
+      alph=alph_median$median)
+    
+    coord<-st_coordinates(tau_filter$geometry)
+    tau_route<-cbind(tau_route, coord)
+    tau_route<-tau_route %>% dplyr::rename(easting = X, northing = Y)
+    tau_route<-left_join(tau_route, site_map, by=c("easting", "northing", "geometry")) 
+    
+    post_sum2<-cbind(tau_route, alph_route)
+    post_sum2<-post_sum2  %>% select(RouteIdentifier, alph, tau, lower_ci, upper_ci, easting, northing)
+    post_sum2$species_id<-sp.id
+    post_sum2$CommonName<-sp
+    
+    ##Need to print post sum##
+    
+    write.table(post_sum2, paste(out.dir, "PosteriorSummaryRoute.csv", sep=""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    
+    
+    ##HERE??
+    #tau_route<-merge(tau_route, site_map, c("easting", "northing"))
+    
+    tau_route$results_code<-"OWLS"
+    tau_route$version<-max.yr
+    tau_route$area_code<-tau_route$RouteIdentifier
+    tau_route$species_code<-""
+    tau_route$species_id<-sp.id
+    tau_route$season<-"Breeding"
+    tau_route$period<-"all years"
+    tau_route$years<-paste(min.yr, "-", max.yr, sep="")
+    tau_route$year_start<-min.yr
+    tau_route$year_end<-max.yr
+    tau_route$trnd<-tau_route$tau
+    tau_route$index_type<-""
+    tau_route$stderr<-""
+    tau_route$model_type<-"SPDE"
+    tau_route$model_fit<-""
+    
+    tau_route$per<-max.yr-min.yr
+    tau_route$per_trend<-tau_route$tau/100
+    tau_route$percent_change<-((1+tau_route$per_trend)^tau_route$per-1)*100
+    
+    tau_route$percent_change_low<-""
+    tau_route$percent_change_high<-""
+    tau_route$prob_decrease_0<-""
+    tau_route$prob_decrease_25<-""
+    tau_route$prob_decrease_30<-""
+    tau_route$prob_decrease_50<-""
+    tau_route$prob_increase_0<-""
+    tau_route$prob_increase_33<-""
+    tau_route$prob_increase_100<-""
+    tau_route$suitability<-""
+    tau_route$confidence<-""
+    tau_route$precision_num<-""
+    tau_route$precision_cat<-ifelse(tau_route$tau_wi<3.5, "High", ifelse(tau_route$tau_wi>=3.5 & tau_route$tau_wi<=6.7, "Medium", "Low"))
+    tau_route$coverage_num<-""
+    tau_route$coverage_cat<-""
+    tau_route$sample_size<-""
+    tau_route$sample_size_units<-""
+    tau_route$prob_LD<-""
+    tau_route$prob_MD<-""
+    tau_route$prob_LC<-""
+    tau_route$prob_MI<-""
+    tau_route$prob_LI<-""
+    
+    trend.csv<-tau_route %>% select(results_code,	version,	area_code,	season,	period, species_code,	species_id,	years,year_start,	year_end,	trnd,	lower_ci, upper_ci, stderr,	model_type,	model_fit,	percent_change,	percent_change_low,	percent_change_high,	prob_decrease_0,	prob_decrease_25,	prob_decrease_30,	prob_decrease_50,	prob_increase_0,	prob_increase_33,	prob_increase_100, suitability, precision_num,	precision_cat,	coverage_num,	coverage_cat,	sample_size, sample_size_units, prob_LD, prob_MD, prob_LC, prob_MI, prob_LI)
+    
+    # Write data to table
+    write.table(trend.csv, file = paste(out.dir, 
+                                        "NOS_TrendsSlope", ".csv", sep = ""),
+                row.names = FALSE, 
+                append = TRUE, 
+                quote = FALSE, 
+                sep = ",", 
+                col.names = FALSE)
+    
+    ##-----------------------------------------------------------
+    #time series plots per route
+    #calculate route level index of abundance
+    
+    #create a loop to get abundance index output per route-year
+    
+    ##Remove cells with no routes
+    routes_with_counts <- unique(sp.data$RouteIdentifier[which(!is.na(sp.data$count))])
+    
+    for(k in 1:length(routes_with_counts)) {
       
-write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-
-} #end route specific loop
-
-
-}#end boreal loop
+      #k<-1 #for testing each cell
+      
+      route1 <-NULL 
+      route1 <- routes_with_counts[k]
+      
+      #need to back assign the factor route1 to its original grid_id
+      route_id<-sp.data %>% ungroup() %>% dplyr::select(RouteIdentifier, geometry) %>% distinct()
+      
+      #join the route_id table to the vertices so that we know the features ID. 
+      vertices<-fmesher::fm_vertices(mesh2)
+      grid0<-st_join(route_id, vertices, by=geometry)
+      grid0<-as.data.frame(grid0)
+      grid0<-grid0 %>% select(RouteIdentifier, .vertex)
+      grid1<- as.integer(grid0[k,".vertex"])
+      
+      #median 
+      
+      #######   
+      d0 <- res$summary.random$alpha$`0.5quant`[grid1]
+      d1 <- res$summary.random$tau$`0.5quant`[grid1]
+      d2 <- data.frame(
+        styear=as.numeric(gsub(paste0(route1,"-"), "",
+                               grep(paste0("\\b",route1,"-"),
+                                    res$summary.random$gamma$ID,
+                                    value=TRUE)))- max.yr, gamma=
+          res$summary.random$gamma$`0.5quant`[grep(
+            paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
+        arrange(styear)
+      d2$x0 <- d0
+      d2$x1 <- d2$styear*d1
+      d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma)
+      d2$grid<-grid1
+      d2$RouteIdentifier<-route1
+      d2$species_code<-sp
+      d2$survey_year<-d2$styear+max.yr
+      
+      d2<-d2 %>% select(-gamma, -x0, -x1)
+      
+      #lci     
+      l0 <- res$summary.random$alpha$`0.025quant`[grid1]
+      l1 <- res$summary.random$tau$`0.025quant`[grid1]
+      l2 <- data.frame(
+        styear=as.numeric(gsub(paste0(route1,"-"), "",
+                               grep(paste0("\\b",route1,"-"),
+                                    res$summary.random$gamma$ID,
+                                    value=TRUE)))- max.yr, gamma=
+          res$summary.random$gamma$`0.025quant`[grep(
+            paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
+        arrange(styear)
+      l2$x0 <- l0
+      l2$x1 <- l2$styear*l1
+      l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma)
+      l2$grid<-grid1
+      
+      l2<-l2 %>% select(-gamma, -x0, -x1)
+      
+      
+      #uci  
+      u0 <- res$summary.random$alpha$`0.975quant`[grid1]
+      u1 <- res$summary.random$tau$`0.975quant`[grid1]
+      u2 <- data.frame(
+        styear=as.numeric(gsub(paste0(route1,"-"), "",
+                               grep(paste0("\\b",route1,"-"),
+                                    res$summary.random$gamma$ID,
+                                    value=TRUE)))- max.yr, gamma=
+          res$summary.random$gamma$`0.975quant`[grep(
+            paste0("\\b",route1,"-"), res$summary.random$gamma$ID)]) %>%
+        arrange(styear)
+      u2$x0 <- u0
+      u2$x1 <- u2$styear*u1
+      u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma)
+      u2$grid<-grid1
+      
+      u2<-u2 %>% select(-gamma, -x0, -x1)
+      
+      
+      #######  
+      
+      d3<-NULL   
+      d3<-merge(d2, l2, by=c("grid", "styear"))
+      d3<-merge(d3, u2, by=c("grid", "styear"))
+      
+      d3$index<-d3$abund
+      d3$upper_ci<-d3$abund_uci
+      d3$lower_ci<-d3$abund_lci
+      d3$year<-d3$styear+max.yr
+      d3$results_code<-"OWLS"
+      d3$version<-max.yr
+      d3$area_code<-d3$RouteIdentifier
+      d3$season<-"Breeding"
+      d3$period<-"all years"
+      d3$stderr<-""
+      d3$stdev<-""
+      d3$species_id<-sp.id
+      d3<-left_join(d3, sp.names, by=c("species_id"))
+      d3$species_sci_name<-d3$scientific_name
+      d3$species_name<-d3$species_code
+      d3$species_code<-""
+      
+      ##Trend LOESS_index
+      if(nrow(d3)>=10){
+        d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
+      }else{
+        d3$LOESS_index<-""
+      }
+      
+      ##Trend_Index 
+      d2$trend_index<-exp(d1*d2$styear + d0)
+      d3$trend_index<-d2$trend_index
+      
+      d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+      
+      write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+      
+    } #end route specific loop
+    
+    
+ # }#end boreal loop
 }#end species loop
-  
+
 
 ```
 
+```{r compare CI width}
+
+#com<-read.csv("output/QC/NOS_TrendsSlope.csv")
+#com<-com %>% mutate(width_ci=upper_ci-lower_ci)
+#com<-com %>% filter(model_type!="PROV")
+#com<-com %>% filter(area_code != "QC")
+#com<-com %>% mutate(CommonName = ifelse(species_id==43362, "Barred Owl", #ifelse(species_id==32671, "Great Horned Owl", ifelse(species_id==7680, "Northern Saw-whet #Owl", "Boreal Owl"))))
+
+post_route<-read.csv("output/QC/PosteriorSummaryRoute.csv")
+post_route<-post_route %>% drop_na()
+post_route<-post_route %>% select(RouteIdentifier, tau, lower_ci, upper_ci, CommonName)
+route_10<-read.csv("output/QC/Route10yrList.csv")
+route_10<-route_10 %>% drop_na()
+
+post_grid<-read.csv("output/QC/PosteriorSummary.csv")
+post_grid<-post_grid %>% drop_na()
+post_grid<-post_grid %>% dplyr::rename(CommonName=taxa_code, lower_ci=tau_ll, upper_ci=tau_ul)
+post_grid<-post_grid %>% select(id,  tau, lower_ci, upper_ci, CommonName)
+
+sp.list<-unique(plot_route$CommonName)
+
+route10_postsum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 5, byrow = FALSE, dimnames = NULL))
+names(route10_postsum) <- c("RouteIdentifier", "tau", "lower_ci", "upper_ci", "CommonName")
+write.table(route10_postsum, file = paste(out.dir, "Route10yrPostSum.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+for(m in 1:length(sp.list)) {
+  #m<-1 #for testing each species
+  
+    plot.data <-NULL 
+    plot.data <- post_route %>% filter(CommonName %in% sp.list[m])
+    
+    route.data<-NULL
+    route.data<-route_10 %>% filter(CommonName %in% sp.list[m])
+    route.list<-unique(route.data$RouteIdentifier)
+    
+    plot.data<-plot.data %>% filter(RouteIdentifier %in% route.list)
+    
+    write.table(plot.data, paste(out.dir, "Route10yrPostSum.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+}
+
+post_sum<-read.csv("output/QC/Route10yrPostSum.csv")
+post_sum<-post_sum %>% drop_na()
+post_sum<-post_sum %>% dplyr::rename(id=RouteIdentifier)
+post_sum$model<-"SPDE"
+post_grid$model<-"iCAR"
+post_sum<-rbind(post_sum, post_grid)
+
+post_sum<-post_sum %>% filter(CommonName != "Boreal Owl")
+post_sum<-post_sum %>% mutate(width_ci = upper_ci-lower_ci)
+
+ggplot(post_sum, aes(x = width_ci, y = model, fill=CommonName)) +
+  scale_fill_brewer(breaks = post_sum$CommonName, palette="Greys")+
+  geom_boxplot()+
+  labs(x = "Precision of the trend estimate", y = "") +
+  theme_classic()+
+  theme(text=element_text(size=20))
+
+
+
+```
+
+Plot Route Tau and Alpha 
+
+Identify routes with at least 10 years of data for plotting
+
+```{r route 10}
+
+#Posterior Summary
+route10<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 3, byrow = FALSE, dimnames = NULL))
+names(route10) <- c("RouteIdentifier", "CommonName", "species_id")
+write.table(route10, file = paste(out.dir, "Route10yrList.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+
+for(m in 1:length(sp.list)) {
+  #m<-1 #for testing each species
+  
+    sp.data <-NULL 
+    sp.data <- dplyr::filter(dat, CommonName == sp.list[m]) %>%
+      droplevels()
+    sp<-sp.list[m] 
+    sp.id<-unique(sp.data$species_id)
+    
+    print(paste("Currently analyzing species ", m, "/", sp.list[m], sep = "")) 
+    
+    ##-----------------------------------------------------------
+    #zero fill by merging with the events dataframe. 
+    sp.data <- left_join(events, sp.data, by = c("SiteCode", "RouteIdentifier", "survey_year"), multiple="all") %>% mutate(ObservationCount = replace(ObservationCount, is.na(ObservationCount), 0)) 
+    
+    #sp.data$StateProvince<-StateProv
+    
+    ##-----------------------------------------------------------
+    #Remove routes that do not have at least one observation of the species
+    site.summ <- melt(sp.data, id.var = "RouteIdentifier",	measure.var = "ObservationCount")
+    site.summ <- cast(site.summ, RouteIdentifier ~ variable,	fun.aggregate="sum")
+    site.sp.list <- unique(subset(site.summ, select = c("RouteIdentifier"), ObservationCount >= 1))
+    
+    # Limit raw data to these species, i.e., those that were observed at least once on a route 
+    sp.data <- merge(sp.data, site.sp.list, by = c("RouteIdentifier"))
+    
+    ##-----------------------------------------------------------
+    #Remove 2020 due to COVID
+    sp.data<-sp.data %>% filter(survey_year!=2020)
+    sp.data<-sp.data %>% filter(survey_year!=2021)
+    sp.data$StateProvince<-"QC"
+    
+    ##-----------------------------------------------------------
+    # Count the number of owls per route as the response variable. The number of stop on a route can be used as a covarite in the model to control for route level effort. Not used in Atlantic Canada because route are mostly complete. 
+    sp.data<-sp.data %>% group_by(RouteIdentifier, survey_year, StateProvince, latitude, longitude, Easting, Northing, protocol_id) %>% summarise(count=sum(ObservationCount))
+    sp.data$StateProvince<-"QC"
+    
+    ##-----------------------------------------------------------
+    #Create index variables
+    sp.data <- sp.data %>% mutate(site_idx = factor(paste(RouteIdentifier))) %>% 
+      group_by(site_idx) %>% 
+      mutate(n_years = dplyr::n()) %>%
+      filter(n_years >= 10) %>% 
+      ungroup() %>% 
+      select(RouteIdentifier) %>% 
+      distinct()
+    
+    sp.data$CommonName<-sp
+    sp.data$species_id<-sp.id
+    
+    write.table(sp.data, paste(out.dir, "Route10yrList.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+    
+}
+  
+
+```
+    
+
+```{r plot grid output}
+
+# plot theme
+# map theme
+theme_map <- function(base_size = 9, base_family = "") {
+  theme_bw(base_size = base_size, base_family = base_family) %+replace%
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          panel.background = element_blank(),
+          panel.border = element_blank(),
+          panel.grid = element_blank(),
+          panel.spacing = unit(0, "lines"),
+          plot.background = element_blank(),
+          legend.background=element_rect(fill=NA, colour=NA),
+          legend.direction="vertical",
+          legend.key=element_rect(fill=NA, colour="white"),
+          legend.text.align=1,
+          legend.text = element_text(size=9),
+          legend.title=element_text(hjust=0, size=11),
+          legend.justification=c(0, 0.5),
+          plot.title = element_text(size=14, hjust = 0.7))
+}
+
+
+#Make Spatial Grid for iCAR Analysis
+test<-events %>% select(RouteIdentifier, latitude, longitude) %>% distinct()
+
+xy<-st_as_sf(test, coords = c("longitude", "latitude"))
+st_crs(xy)<-"+proj=longlat +datum=NAD83"
+
+#all grid for North American
+poly<- read_sf(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="nos_na_grid")
+
+#sf point
+newCRS<-st_crs(poly)
+xy<-st_transform(xy, newCRS)
+
+qq <- rnaturalearth::ne_states(country = "canada", returnclass = "sf") %>% st_transform(newCRS) #pull in the background map
+qq<-qq %>% filter(name=="Québec")
+
+plot_route<-NULL
+plot_route<-read.csv("output/QC/PosteriorSummaryRoute.csv")
+plot_route<-plot_route %>% drop_na()
+plot_route<-plot_route %>% select(RouteIdentifier, alph, tau, CommonName)
+
+range_route<-plot_route %>% group_by(CommonName) %>% summarise(meanalph=mean(alph), minalph=min(alph), maxalph=max(alph), meantau = mean(tau), mintau = min(tau), maxtau=max(tau))
+write.csv(range_route, "output/QC/Range_Route.csv")
+
+route_10<-read.csv("output/QC/Route10yrList.csv")
+
+
+# make route level maps ---------------------------------------------------------
+
+sp.list<-unique(plot_route$CommonName)
+
+for(m in 1:length(sp.list)) {
+  #m<-1 #for testing each species
+  
+    plot.data <-NULL 
+    plot.data <- plot_route %>% filter(CommonName %in% sp.list[m])
+    
+    route.data<-NULL
+    route.data<-route_10 %>% filter(CommonName %in% sp.list[m])
+    route.list<-unique(route.data$RouteIdentifier)
+    
+    plot.data<-left_join(plot.data, xy, by="RouteIdentifier")
+    plot.data<-plot.data %>% filter(RouteIdentifier %in% route.list)
+
+ #make plot function
+    tau_p1<-ggplot() +
+    geom_sf(data = qq, fill = NA) +
+    geom_sf() +
+    coord_sf(datum = NA) +  
+    geom_sf(data = plot.data, size = 5, aes(geometry=geometry, colour=tau)) +
+    scale_colour_gradient2("Tau\n(% per year)", low = ("red4"),
+                         mid = "white",
+                         high = ("royalblue4"), midpoint = 0, space = "Lab",
+                         guide = "colourbar") +
+     theme_map() + theme(panel.grid.major=element_line(colour="transparent"))
+    
+   
+  
+   # print cell maps
+ggsave(paste(out.dir, sp.list[m], "TauRoutePlot.jpeg"), plot=tau_p1)
+
+
+# map alpha
+ alph_p1<-ggplot() +
+    geom_sf(data = qq, fill = NA) +
+    geom_sf() +
+    coord_sf(datum = NA) +  
+    geom_sf(data = plot.data, size = 5, aes(geometry=geometry, colour=alph)) +
+    scale_colour_gradient2("Alpha", low = "orange", mid = "white",
+                       high = "green4", midpoint = 0, space = "Lab",
+                       na.value = "grey40", guide = "colourbar") +
+     theme_map() + theme(panel.grid.major=element_line(colour="transparent"))    
+
+# print cell maps
+ggsave(paste(out.dir, sp.list[m], "AlphaRoutePlot.jpeg"), plot=alph_p1)
+
+
+} #end loop
+
+```
+
+##Compare means and ranges
+
+```{r range compare}
+
+range_grid <-range_grid %>% dplyr::rename(CommonName=taxa_code)
+range_grid$model<-"iCAR"
+range_route$model<-"SPDE"
+range_all<-rbind(range_grid, range_route)
+
+ggplot(range_all)+
+  geom_line(aes(x=model, y=meanalph, group=CommonName, colour=CommonName))+
+  geom_errorbar(aes(ymin=minalph, ymax=maxalph, group=CommonName))+
+  theme_classic()
+
+```
+
+#New code using inla.spde.make.A mesh which is not fully exicuted. 
+
+```{r model validation}
+
+all_coords <- as.matrix(st_coordinates(sp.data))
+    
+mesh<-inla.mesh.2d(all_coords, 
+                           boundary = hull,
+                           max.edge = c(50, 200), # km inside and outside
+                           cutoff = 0,
+                           crs = fm_crs(sp.data))
+   
+      spde <- inla.spde2.pcmatern(  # pg 218 this formula should include an alpha, default is 2 if the model does not include times. 
+      mesh = mesh,
+      prior.range = c(500, 0.5),
+      prior.sigma = c(1, 0.5)
+    )
+    
+alpha_idx <- inla.spde.make.index(name = "alpha", n.spde = mesh$n)
+eps_idx <- inla.spde.make.index(name = "eps", n.spde = mesh$n)
+tau_idx <- inla.spde.make.index(name = "tau", n.spde = mesh$n)
+
+# make projector matrices
+A_alpha <- inla.spde.make.A(mesh = mesh, loc = all_coords)
+
+A_tau <- inla.spde.make.A(
+  mesh = mesh, loc = all_coords,
+  weights = sp.data$std_yr
+) # note weights argument
+
+# stack observed data
+stack_fit <- inla.stack(
+  tag = "obs",
+  data = list(count = as.vector(sp.data$count)), # response from data frame
+  effects = list(data.frame(
+    intercept = 1,
+    kappa = sp.data$site_idx, 
+    gamma = sp.data$year_idx
+  ), # predictors from data frame
+  alpha = alpha_idx, # or index sets if spatial
+  tau = tau_idx
+  ),
+  A = list(
+    1, # a value of 1 is given for non-spatial terms
+    A_alpha,
+    A_tau
+  ), compress=TRUE, remove.unused=TRUE
+)
+
+svc_form <- count ~ -1 +
+  f(kappa, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+  f(gamma, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+  f(alpha, model = spde) +
+  f(tau, model = spde)
+
+res <- inla(svc_form,
+  family = "nbinomial",
+  data = inla.stack.data(stack_fit), # stack the stack
+  control.predictor = list(
+    A = inla.stack.A(stack_fit),
+    compute = FALSE
+  ), # must define A
+  control.compute = list(waic = TRUE, cpo = TRUE, config = TRUE),
+  control.inla = list(strategy = "adaptive", int.strategy = "eb"),
+  verbose = FALSE
+)
+
+
+#create prediction
+stk.pred <- inla.stack(data=list(y=NA), 
+                       effects = list(data.frame(
+    intercept = 1,
+    kappa = sp.data$site_idx, 
+    gamma = sp.data$year_idx
+  ), # predictors from data frame
+  alpha = alpha_idx, # or index sets if spatial
+  tau = tau_idx
+  ),
+  A = list(
+    1, # a value of 1 is given for non-spatial terms
+    A_alpha,
+    A_tau
+  ), tag='pred')
+
+
+#join the prediction stack with the one for the full data
+stk.full <- inla.stack(stack_fit, stk.pred)
+
+res.pred<-inla(svc_form, data=inla.stack.data(stk.full),
+                 family= 'nbinomial', quantiles = NULL,
+                 control.predictor=list(A=inla.stack.A(stk.full),compute=FALSE),  #compute gives you the marginals of the linear predictor
+                 control.compute = list(config = TRUE), #model diagnostics and config = TRUE gives you the GMRF
+                 control.inla(strategy = 'simplified.laplace', huge = TRUE),  #this is to make it run faster
+                 verbose = FALSE) 
+
+index.pred<-inla.stack.index(stk.full, "pred")$data
+post.mean.pred<-res.pred$summary.linear.predictor
+
+```

@@ -170,7 +170,7 @@ for(m in 1:length(sp.list)) {
     
     # components
     svc_components <- ~ -1 +
-      kappa(site_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
+      #kappa(site_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
       ellip(protocol_idx, model = "iid", constr = TRUE, hyper = list(prec = pc_prec)) +
       alpha(geometry, model = spde) +
       tau(geometry, weights = std_yr, model = spde)+
