@@ -24,7 +24,7 @@ if(class(data) == 'try-error'){
   write.csv(data, paste(dat.dir, collection, ".RawData.csv", sep = ""), row.names = FALSE)
  
   if(collection == "MBOWLS"){
-    data<-data %>% filter (protocol_id != 29) #remove old MB data collected under an old procol
+    data<-data %>% filter (protocol_id != 29) #remove old MB data collected under an old protcol
   }
   }
 
@@ -84,7 +84,6 @@ in.data$StateProvince[in.data$StateProvince  == "Nova Scotia"]  <- "NS"
 in.data$StateProvince[in.data$StateProvince  == "Manitoba"]  <- "MB"
 in.data$StateProvince[in.data$StateProvince  == "MN"]  <- "MB"
 in.data$StateProvince[in.data$StateProvince  == "Alberta"]  <- "AB"
-
 in.data<- in.data %>% filter(StateProvince != "NL")
 
 #not positive were this route is located. 
@@ -104,7 +103,7 @@ protcol<-anal.param %>% dplyr::filter(collection == filter)
 Events<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
 names(Events) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "nstop", "StateProvince", "latitude", "longitude", "protocol_id")
 #only need to create the table once per analysis   
-write.table(Events, file = paste(out.dir, collection, "Events",".csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
+write.table(Events, file = paste(out.dir, collection, "Events.csv", sep = ""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 Owls<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 11, byrow = FALSE, dimnames = NULL))
 names(Owls) <- c("SiteCode", "RouteIdentifier", "survey_year", "CollectorNumber", "collection", "protocol_id", "doy",  "CommonName", "species_id", "ObservationCount", "StateProvince")
@@ -132,8 +131,8 @@ for(k in 1:nrow(protcol)) {
   #Do this for all programs due to the influnce of weather on min and max day
   
 # if(protocol_id=="35"){ #Add buffer to QC data for cleaning. Others may also request this filter be adjusted. 
-    min.doy <- min.doy-7
-    max.doy <- max.doy+7
+    min.doy <- min.doy-14
+    max.doy <- max.doy+14
 #}
   
   #subset data based on protocol_ID 

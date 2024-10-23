@@ -34,6 +34,9 @@ min(data$survey_year)
 
 data<-data %>% filter(RouteIdentifier!="`") %>% drop_na(RouteIdentifier)
 
+data<-data %>% filter(!is.na(CommonName))
+data<-data %>% mutate(ObservationCount = ifelse(is.na(ObservationCount), 1, ObservationCount))
+
 #summarize the number of route run in each year
 route.yr.tot<-data %>% group_by(survey_year) %>% summarise(nroute=n_distinct(RouteIdentifier))
 
@@ -47,6 +50,8 @@ write.table(route.yr, file = paste(out.dir, collection[m], "RoutesPerYear.csv", 
   
 #summarize the total count of each species per year
 data$ObservationCount<-as.numeric(data$ObservationCount) 
+data<-data %>% filter(is.na(EffortMeasurement14)|EffortMeasurement14==0)
+
 species.yr<-data %>% group_by(survey_year, CommonName, protocol_id) %>% summarise(count=sum(ObservationCount))
 species.yr<-cast(species.yr, CommonName+protocol_id~survey_year, value="count") 
 species.yr<-species.yr %>% filter(!(is.na(CommonName)))

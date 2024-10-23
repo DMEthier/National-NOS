@@ -263,16 +263,27 @@ for(m in 1:length(sp.list)) {
     f(gamma_ij, model="iid", constr=TRUE, 
       hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))
   
-  if(sp=="Great Horned Owl"){
+  #if(sp=="Great Horned Owl"){
     fam<-"poisson" 
-  }else{
-    fam<-"nbinomial"
-  }
+  #}else{
+  #  fam<-"nbinomial"
+  #}
+  
+  #fam="zeroinflatedpoisson1"
  
   
   out1<-try(inla(f1, family = fam, data = sp.data, 
                  control.predictor = list(compute = TRUE), control.compute = list(dic=TRUE, config = TRUE), verbose =TRUE), silent = T)
    
+  
+  ##Dispersion Statistic
+#mu1<-out1$summary.fitted.values[,"mean"]
+#E1<-(sp.data$count-mu1)/ sqrt(mu1) #Pearson residuals
+#N<-nrow(sp.data)
+#p<-nrow(out1$summary.fixed)
+#Dispersion1<-sum(E1^2)/(N-p)
+#print(paste("Dispersions Statistic out1 = ", Dispersion1, sep = "")) 
+  
   
   ##Cell Estimate of Alpha
   ##---------------------------------------------------------
@@ -1043,11 +1054,11 @@ while(!is.null(dev.list())) dev.off()
     # formula, with "." meaning "add all the model components":
     svc_formula <- count ~ .
     
-    if(sp=="Great Horned Owl"){
+  #  if(sp=="Great Horned Owl"){
     fam<-"poisson" 
-  }else{
-    fam<-"nbinomial"
-  }
+  #}else{
+  #  fam<-"nbinomial"
+  #}
     
     #Run Model
     res <- bru(

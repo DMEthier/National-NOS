@@ -38,7 +38,7 @@ list.coll<-unique(anal.param$collection)
 list.prot<-unique(anal.param$protocol_id)
 
 #select your collection manually for data cleaning
-collection <- "QCOWLS"
+collection <- "MBOWLS"
 
 ```
 
