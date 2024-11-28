@@ -27,6 +27,8 @@ library(spdep)
 library(naturecounts)
 library(oce)
 library(ggspatial)
+library(excursions)
+
 
 #remotes::install_github("inbo/inlatools")
 library(inlatools)
@@ -249,7 +251,7 @@ for(m in 1:length(sp.list)) {
   #Model 1  
   
   #Formula 
-  f1 <- count ~ -1 + nstop +
+  f1 <- count ~ -1 + nstop + 
     # cell ICAR random intercepts
     f(alpha_i, model="besag", graph=g1, constr=FALSE, scale.model=TRUE,
       hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
@@ -258,16 +260,16 @@ for(m in 1:length(sp.list)) {
       hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01)))) +
     # random route intercepts
     f(kappa_k, model="iid", constr=TRUE,
-      hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))+
-    #id-year effect
-    f(gamma_ij, model="iid", constr=TRUE, 
       hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))))
+    #id-year effect
+   # f(gamma_ij, model="iid", constr=TRUE, 
+  #    hyper = list(prec = list(prior = "pc.prec", param = c(1, 0.01))) 
   
-  #if(sp=="Great Horned Owl"){
+  if(sp=="Great Horned Owl"){
     fam<-"poisson" 
-  #}else{
-  #  fam<-"nbinomial"
-  #}
+  }else{
+    fam<-"nbinomial"
+  }
   
   #fam="zeroinflatedpoisson1"
  
@@ -289,145 +291,146 @@ for(m in 1:length(sp.list)) {
   ##---------------------------------------------------------
   #Results
   #Random spatial
-  random.out<-out1$summary.hyperpar[,c("mean", "sd", "0.025quant", "0.975quant")]
-  random.out<-signif(random.out, digits = 4)
-  random.out$Species <- sp.list[m]
-  names(random.out)[1:5] <- c("mean", "SD", "0.025quant", "0.975quant", "Speices")
-  
-  write.table(random.out, paste(out.dir, "Random_Summary.csv", sep=""), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
-  
-  ##Remove cells with no routes
-  cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
-  
-  # get alpha summaries
-  alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
-  alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
-  alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
-  alph_iw <- alph_ul - alph_ll
-  
-  # get tau summaries
-  tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
-          - 1) * 100
-  tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
-             - 1) * 100
-  tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
-             - 1) * 100
-  tau_iw <- tau_ul - tau_ll
-  
-  ##-----------------------------------------------------------
-  #time series plots per cell
-  
-  #Calculate cell level index of abundance
-  
-  #create a loop to get abundance index output per cell-year
-  
-  for(k in 1:length(cells_with_counts)) {
-    
-    #k<-1 #for testing each cell
-    
-    cell1 <-NULL 
-    cell1 <- cells_with_counts[k]
-    
-    #need to back assign the factor cell1 to its original grid_id
-    cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
-    grid1<- as.character(cell_id[k,"cell_id"])
-    
-    #median 
-    d0 <- out1$summary.random$alpha_i$`0.5quant`[cell1]
-    d1 <- out1$summary.random$tau_i$`0.5quant`[cell1]
-    d2 <- data.frame(
-      styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                             grep(paste0("\\b",cell1,"-"),
-                                  out1$summary.random$gamma_ij$ID,
-                                  value=TRUE)))- max.yr, gamma_ij=
-        out1$summary.random$gamma_ij$`0.5quant`[grep(
-          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-      arrange(styear)
-    d2$x0 <- d0
-    d2$x1 <- d2$styear*d1
-    d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma_ij)
-    d2$cell<-cell1
-    d2<-merge(d2, grid_key, by.x="cell", by.y="alpha_i")
-    d2$taxa_code<-sp
-    
-    d3<-d2 %>% select(cell_id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
-    
-    #lci     
-    l0 <- out1$summary.random$alpha_i$`0.025quant`[cell1]
-    l1 <- out1$summary.random$tau_i$`0.025quant`[cell1]
-    l2 <- data.frame(
-      styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                             grep(paste0("\\b",cell1,"-"),
-                                  out1$summary.random$gamma_ij$ID,
-                                  value=TRUE)))- max.yr, gamma_ij=
-        out1$summary.random$gamma_ij$`0.025quant`[grep(
-          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-      arrange(styear)
-    l2$x0 <- l0
-    l2$x1 <- l2$styear*l1
-    l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma_ij)
-    l2$cell<-cell1
-    l2<-merge(l2, grid_key, by.x="cell", by.y="alpha_i")
-    
-    l3<-l2 %>% select(cell_id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
-    
-    #uci  
-    u0 <- out1$summary.random$alpha_i$`0.975quant`[cell1]
-    u1 <- out1$summary.random$tau_i$`0.975quant`[cell1]
-    u2 <- data.frame(
-      styear=as.numeric(gsub(paste0(cell1,"-"), "",
-                             grep(paste0("\\b",cell1,"-"),
-                                  out1$summary.random$gamma_ij$ID,
-                                  value=TRUE)))- max.yr, gamma_ij=
-        out1$summary.random$gamma_ij$`0.975quant`[grep(
-          paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
-      arrange(styear)
-    u2$x0 <- u0
-    u2$x1 <- u2$styear*u1
-    u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma_ij)
-    u2$cell<-cell1
-    u2<-merge(u2, grid_key, by.x="cell", by.y="alpha_i")
-    
-    
-    u3<-u2 %>% select(cell_id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
-    
-    d3<-merge(d3, l3, by=c("cell_id", "year"))
-    d3<-merge(d3, u3, by=c("cell_id", "year"))
-    
-    d3 <-d3 %>% mutate(
-      results_code="OWLS", 
-   version="2023",
-   area_code=d3$cell_id,
-   year=d3$year,
-   season="Breeding",
-   period="all years",
-   species_code="",
-   index=d3$abund,
-   stderr="",
-   stdev="",
-   upper_ci=d3$abund_uci,
-   lower_ci=d3$abund_lci,
-   species_name=d3$taxa_code,
-   species_id=sp.id)
-    
-    d3<-left_join(d3, sp.names, by=c("species_id"))
-    d3$species_sci_name<-d3$scientific_name
-    
-    ##LOESS SMOOTH
-    if(nrow(d3)>=10){
-      d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
-    }else{
-      d3$LOESS_index<-""
-    }
-    
-    ##Trend Slope 
-    d2$trend_index<-exp(d1*d2$styear + d0)
-    d3$trend_index<-d2$trend_index
-    
-    d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
-    
-    write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
-    
+  # random.out<-out1$summary.hyperpar[,c("mean", "sd", "0.025quant", "0.975quant")]
+  # random.out<-signif(random.out, digits = 4)
+  # random.out$Species <- sp.list[m]
+  # names(random.out)[1:5] <- c("mean", "SD", "0.025quant", "0.975quant", "Speices")
+  # 
+  # write.table(random.out, paste(out.dir, "Random_Summary.csv", sep=""), row.names = TRUE, append = TRUE, quote = FALSE, sep = ",", col.names = TRUE)
+  # 
+  # ##Remove cells with no routes
+   cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
+  # 
+  # # get alpha summaries
+  # alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
+  # alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
+  # alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
+  # alph_iw <- alph_ul - alph_ll
+  # 
+  # # get tau summaries
+  # tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
+  #         - 1) * 100
+  # tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
+  #            - 1) * 100
+  # tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
+  #            - 1) * 100
+  # tau_iw <- tau_ul - tau_ll
+  # 
+  #  
+  # ##-----------------------------------------------------------
+  # #time series plots per cell
+  # 
+  # #Calculate cell level index of abundance
+  # 
+  # #create a loop to get abundance index output per cell-year
+  # 
+  # for(k in 1:length(cells_with_counts)) {
+  #   
+  #   #k<-1 #for testing each cell
+  #   
+  #   cell1 <-NULL 
+  #   cell1 <- cells_with_counts[k]
+  #   
+  #   #need to back assign the factor cell1 to its original grid_id
+  #   cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
+  #   grid1<- as.character(cell_id[k,"cell_id"])
+  #   
+  #   #median 
+  #   d0 <- out1$summary.random$alpha_i$`0.5quant`[cell1]
+  #   d1 <- out1$summary.random$tau_i$`0.5quant`[cell1]
+  #   d2 <- data.frame(
+  #     styear=as.numeric(gsub(paste0(cell1,"-"), "",
+  #                            grep(paste0("\\b",cell1,"-"),
+  #                                 out1$summary.random$gamma_ij$ID,
+  #                                 value=TRUE)))- max.yr, gamma_ij=
+  #       out1$summary.random$gamma_ij$`0.5quant`[grep(
+  #         paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+  #     arrange(styear)
+  #   d2$x0 <- d0
+  #   d2$x1 <- d2$styear*d1
+  #   d2$abund <- exp(d2$x0 + d2$x1 + d2$gamma_ij)
+  #   d2$cell<-cell1
+  #   d2<-merge(d2, grid_key, by.x="cell", by.y="alpha_i")
+  #   d2$taxa_code<-sp
+  #   
+  #   d3<-d2 %>% select(cell_id, taxa_code, styear, abund) %>% mutate(year=styear+2023) %>% select(-styear)
+  #   
+  #   #lci     
+  #   l0 <- out1$summary.random$alpha_i$`0.025quant`[cell1]
+  #   l1 <- out1$summary.random$tau_i$`0.025quant`[cell1]
+  #   l2 <- data.frame(
+  #     styear=as.numeric(gsub(paste0(cell1,"-"), "",
+  #                            grep(paste0("\\b",cell1,"-"),
+  #                                 out1$summary.random$gamma_ij$ID,
+  #                                 value=TRUE)))- max.yr, gamma_ij=
+  #       out1$summary.random$gamma_ij$`0.025quant`[grep(
+  #         paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+  #     arrange(styear)
+  #   l2$x0 <- l0
+  #   l2$x1 <- l2$styear*l1
+  #   l2$abund_lci <- exp(l2$x0 + l2$x1 + l2$gamma_ij)
+  #   l2$cell<-cell1
+  #   l2<-merge(l2, grid_key, by.x="cell", by.y="alpha_i")
+  #   
+  #   l3<-l2 %>% select(cell_id, styear, abund_lci) %>% mutate(year=styear+2023) %>% select(-styear) 
+  #   
+  #   #uci  
+  #   u0 <- out1$summary.random$alpha_i$`0.975quant`[cell1]
+  #   u1 <- out1$summary.random$tau_i$`0.975quant`[cell1]
+  #   u2 <- data.frame(
+  #     styear=as.numeric(gsub(paste0(cell1,"-"), "",
+  #                            grep(paste0("\\b",cell1,"-"),
+  #                                 out1$summary.random$gamma_ij$ID,
+  #                                 value=TRUE)))- max.yr, gamma_ij=
+  #       out1$summary.random$gamma_ij$`0.975quant`[grep(
+  #         paste0("\\b",cell1,"-"), out1$summary.random$gamma_ij$ID)]) %>%
+  #     arrange(styear)
+  #   u2$x0 <- u0
+  #   u2$x1 <- u2$styear*u1
+  #   u2$abund_uci <- exp(u2$x0 + u2$x1 + u2$gamma_ij)
+  #   u2$cell<-cell1
+  #   u2<-merge(u2, grid_key, by.x="cell", by.y="alpha_i")
+  #   
+  #   
+  #   u3<-u2 %>% select(cell_id, styear, abund_uci) %>% mutate(year=styear+2023) %>% select(-styear)   
+  #   
+  #   d3<-merge(d3, l3, by=c("cell_id", "year"))
+  #   d3<-merge(d3, u3, by=c("cell_id", "year"))
+  #   
+  #   d3 <-d3 %>% mutate(
+  #     results_code="OWLS", 
+  #  version="2023",
+  #  area_code=d3$cell_id,
+  #  year=d3$year,
+  #  season="Breeding",
+  #  period="all years",
+  #  species_code="",
+  #  index=d3$abund,
+  #  stderr="",
+  #  stdev="",
+  #  upper_ci=d3$abund_uci,
+  #  lower_ci=d3$abund_lci,
+  #  species_name=d3$taxa_code,
+  #  species_id=sp.id)
+  #   
+  #   d3<-left_join(d3, sp.names, by=c("species_id"))
+  #   d3$species_sci_name<-d3$scientific_name
+  #   
+  #   ##LOESS SMOOTH
+  #   if(nrow(d3)>=10){
+  #     d3 <- d3 %>% mutate(LOESS_index = loess_func(index, year))
+  #   }else{
+  #     d3$LOESS_index<-""
+  #   }
+  #   
+  #   ##Trend Slope 
+  #   d2$trend_index<-exp(d1*d2$styear + d0)
+  #   d3$trend_index<-d2$trend_index
+  #   
+  #   d3<-d3 %>% select(results_code, version, area_code, season, period, species_code, species_id, year, index, stderr, stdev, upper_ci, lower_ci, LOESS_index, trend_index)
+  #   
+  #   write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
+  #   
   } #end cell specific loop
   
 ##-----------------------------------------------------------
@@ -466,7 +469,37 @@ for(m in 1:length(sp.list)) {
               ucl_tau=quantile(val, probs=0.975), iw_tau=ucl_tau-lcl_tau,
               n=dplyr::n()/posterior_ss); head(tau_prov)
   tau_prov$taxa_code <- sp.list[m]
+
+#Probabilites  
+# Initialize a matrix to store predicted counts
   
+n_cells<-length(cells_with_counts)  
+predicted_counts <- matrix(NA, nrow = posterior_ss, ncol = n_cells)
+
+# Loop through each posterior sample
+for (i in 1:n_samples) {
+  # Extract fixed effects and random effects
+  fixed_effects <- samp1[[i]]$latent[1]  #nstop random effect
+  random_effects_alpha <- posterior_samples[[i]]$latent[2:(n_cells + 1)]  # ICAR random intercepts
+  random_effects_tau <- posterior_samples[[i]]$latent[(n_cells + 2):(2 * n_cells + 1)]  # ICAR random year slopes
+  random_effects_kappa <- posterior_samples[[i]]$latent[(2 * n_cells + 2):(2 * n_cells + 1 + n_routes)]  # IID random route intercepts
+
+ # Calculate predicted counts for each cell
+  # Here, we assume that std_yr is a vector of year values for each cell
+  predicted_counts[i, ] <- exp(fixed_effects + random_effects_alpha + random_effects_tau * sp.data$survey_year + random_effects_kappa)
+}
+  
+##HERE
+# Calculate the mean predicted counts
+mean_predicted_counts <- rowMeans(predicted_counts)
+
+# Estimate the probability of decrease for each cell
+probability_decrease <- apply(predicted_counts, 2, function(x) mean(x < mean_predicted_counts))
+
+# View the probabilities
+print(probability_decrease)
+
+    
 #output for SoBC. This is clunky, but clear. 
   tau_prov <- tau_prov %>% mutate( 
   results_code="OWLS",
