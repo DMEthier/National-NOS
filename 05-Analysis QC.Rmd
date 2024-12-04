@@ -66,8 +66,8 @@ Create output tables
 ```{r output tables}
 
 #Posterior Summary
-post_sum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 12, byrow = FALSE, dimnames = NULL))
-names(post_sum) <- c("alpha_i", "alph", "alph_ll", "alph_ul", "alph_iw", "tau", "tau_ll", "tau_ul", "tau_iw", "tau_sig", "id", "taxa_code")
+post_sum<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 13, byrow = FALSE, dimnames = NULL))
+names(post_sum) <- c("alpha_i", "alph", "alph_ll", "alph_ul", "alph_iw", "tau", "tau_ll", "tau_ul", "tau_iw", "tau_sig", "tau_prob0", "id", "taxa_code")
 write.table(post_sum, file = paste(out.dir, "PosteriorSummary.csv", sep=""), row.names = FALSE, append = FALSE, quote = FALSE, sep = ",")
 
 post_sum2<- as.data.frame(matrix(data = NA, nrow = 1, ncol = 9, byrow = FALSE, dimnames = NULL))
@@ -300,23 +300,23 @@ for(m in 1:length(sp.list)) {
   # 
   # ##Remove cells with no routes
    cells_with_counts <- unique(sp.data$alpha_i[which(!is.na(sp.data$count))])
-  # 
-  # # get alpha summaries
-  # alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
-  # alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
-  # alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
-  # alph_iw <- alph_ul - alph_ll
-  # 
-  # # get tau summaries
-  # tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
-  #         - 1) * 100
-  # tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
-  #            - 1) * 100
-  # tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
-  #            - 1) * 100
-  # tau_iw <- tau_ul - tau_ll
-  # 
-  #  
+
+  # get alpha summaries
+  alph <- exp(out1$summary.random$alpha_i$`0.5quant`[cells_with_counts])
+  alph_ll <- exp(out1$summary.random$alpha_i$`0.025quant`[cells_with_counts])
+  alph_ul <- exp(out1$summary.random$alpha_i$`0.975quant`[cells_with_counts])
+  alph_iw <- alph_ul - alph_ll
+
+  # get tau summaries
+  tau <- (exp(out1$summary.random$tau_i$`0.5quant`[cells_with_counts])
+          - 1) * 100
+  tau_ll <- (exp(out1$summary.random$tau_i$`0.025quant`[cells_with_counts])
+             - 1) * 100
+  tau_ul <- (exp(out1$summary.random$tau_i$`0.975quant`[cells_with_counts])
+             - 1) * 100
+  tau_iw <- tau_ul - tau_ll
+
+
   # ##-----------------------------------------------------------
   # #time series plots per cell
   # 
@@ -332,7 +332,7 @@ for(m in 1:length(sp.list)) {
   #   cell1 <- cells_with_counts[k]
   #   
   #   #need to back assign the factor cell1 to its original grid_id
-  #   cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
+    cell_id<-sp.data %>% ungroup() %>% dplyr::select(cell_id, alpha_i) %>% distinct()
   #   grid1<- as.character(cell_id[k,"cell_id"])
   #   
   #   #median 
@@ -431,7 +431,7 @@ for(m in 1:length(sp.list)) {
   #   
   #   write.table(d3, paste(out.dir, "NOS_AnnualIndices.csv", sep = ""), row.names = FALSE, append = TRUE, quote = FALSE, sep = ",", col.names = FALSE)
   #   
-  } #end cell specific loop
+ # } #end cell specific loop
   
 ##-----------------------------------------------------------
 #Explore posterior samples 
@@ -457,6 +457,9 @@ for(m in 1:length(sp.list)) {
   row.names(tau_samps2) <- NULL
   val_names <- grep("V", names(tau_samps2))
   
+# Calculate the probability that tau is negative for each cell
+tau_prob0<- rowMeans(tau_samps1< 0)
+ 
 #tau_prov
   tau_prov <- tau_samps2 %>%
     ungroup() %>%  #this seems to be needed before the select function or it won't work
@@ -469,35 +472,30 @@ for(m in 1:length(sp.list)) {
               ucl_tau=quantile(val, probs=0.975), iw_tau=ucl_tau-lcl_tau,
               n=dplyr::n()/posterior_ss); head(tau_prov)
   tau_prov$taxa_code <- sp.list[m]
+  
+  
 
 #Probabilites  
 # Initialize a matrix to store predicted counts
-  
-n_cells<-length(cells_with_counts)  
-predicted_counts <- matrix(NA, nrow = posterior_ss, ncol = n_cells)
+#   
+# n_cells<-length(cells_with_counts)  
+# n_route<-length(unique(sp.data$RouteIdentifier))
+# predicted_counts <- matrix(NA, nrow = posterior_ss, ncol = n_cells)
+# 
+# # # Loop through each posterior sample
+# for (i in 1:posterior_ss) {
+#   # Extract fixed effects and random effects
+#   fixed_effects <- samp1[[i]]$latent[1]  #nstop random effect
+#   random_effects_alpha <- samp1[[i]]$latent[2:(n_cells + 1)]  # ICAR random intercepts
+#   random_effects_tau <- samp1[[i]]$latent[(n_cells + 2):(2 * n_cells + 1)]  # ICAR random year slopes
+#   random_effects_kappa <- samp1[[i]]$latent[(2 * n_cells + 2):(2 * n_cells + 1 + n_route)]  # IID random route intercepts
+# 
+#   predicted_counts[i, ] <- exp(fixed_effects + random_effects_alpha + random_effects_tau * sp.data$std_yr + random_effects_kappa)
+# }
 
-# Loop through each posterior sample
-for (i in 1:n_samples) {
-  # Extract fixed effects and random effects
-  fixed_effects <- samp1[[i]]$latent[1]  #nstop random effect
-  random_effects_alpha <- posterior_samples[[i]]$latent[2:(n_cells + 1)]  # ICAR random intercepts
-  random_effects_tau <- posterior_samples[[i]]$latent[(n_cells + 2):(2 * n_cells + 1)]  # ICAR random year slopes
-  random_effects_kappa <- posterior_samples[[i]]$latent[(2 * n_cells + 2):(2 * n_cells + 1 + n_routes)]  # IID random route intercepts
-
- # Calculate predicted counts for each cell
-  # Here, we assume that std_yr is a vector of year values for each cell
-  predicted_counts[i, ] <- exp(fixed_effects + random_effects_alpha + random_effects_tau * sp.data$survey_year + random_effects_kappa)
-}
-  
-##HERE
-# Calculate the mean predicted counts
-mean_predicted_counts <- rowMeans(predicted_counts)
-
-# Estimate the probability of decrease for each cell
-probability_decrease <- apply(predicted_counts, 2, function(x) mean(x < mean_predicted_counts))
 
 # View the probabilities
-print(probability_decrease)
+print(probability_tau_negative)
 
     
 #output for SoBC. This is clunky, but clear. 
@@ -640,7 +638,7 @@ trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period,
   post_sum <- data.frame(alpha_i=cells_with_counts,
                          alph, alph_ll, alph_ul, alph_iw,
                          #eps, eps_ll, eps_ul, eps_iw, eps_sig=NA,
-                         tau, tau_ll, tau_ul, tau_iw, tau_sig=NA)
+                         tau, tau_ll, tau_ul, tau_iw, tau_sig=NA, tau_prob0)
   post_sum$tau_sig <- ifelse((post_sum$tau_ll < 1 & post_sum$tau_ul > 1),
                              post_sum$tau_sig <- 0,
                              post_sum$tau_sig <- post_sum$tau)
@@ -669,7 +667,7 @@ trend.csv<-tau_prov %>% select(results_code,	version,	area_code,	season,	period,
   model_fit="",
   percent_change_low="",
   percent_change_high="",
-  prob_decrease_0="",
+  prob_decrease_0=tau_prob0,
   prob_decrease_25="",
   prob_decrease_30="",
   prob_decrease_50="",
@@ -786,7 +784,7 @@ theme_map <- function(base_size = 9, base_family = "") {
           legend.key=element_rect(fill=NA, colour="white"),
           legend.text.align=1,
           legend.text = element_text(size=9),
-          legend.title=element_text(hjust=0, size=11),
+         # legend.title=element_text(hjust=0, size=11),
           legend.justification=c(0, 0.5),
           plot.title = element_text(size=14, hjust = 0.7))
 }
@@ -799,7 +797,7 @@ xy<-st_as_sf(test, coords = c("longitude", "latitude"))
 st_crs(xy)<-"+proj=longlat +datum=NAD83"
 
 #all grid for North American
-poly<- read_sf(dsn="C:/Users/dethier/Documents/ethier-scripts/National-NOS/data", layer="nos_na_grid")
+poly<- read_sf(dsn="C:/Users/ethie/Documents/ethier-scripts/National-NOS/data", layer="nos_na_grid")
 
 #sf point
 newCRS<-st_crs(poly)
@@ -839,17 +837,17 @@ p1<-ggplot()+
 
 # make cell level maps ---------------------------------------------------------
 
-results_cells <- merge(Grid, pot, by="id", all=F)
-res_sf <- as(results_cells, "sf") 
-
-sp.list<-unique(res_sf$CommonName)
 
 #compile the trend outputs
 pot_est<-trnd <- read.csv("output/QC/PosteriorSummary.csv")
-pot<-pot_est %>% select(alph, tau, id, taxa_code)
+pot<-pot_est %>% select(alph, tau, tau_sig, tau_prob0, id, taxa_code)
 pot<-pot %>% drop_na()
 
-range_grid<-pot %>% group_by(taxa_code) %>% summarise(meanalph=mean(alph), minalph=min(alph), maxalph=max(alph), meantau = mean(tau), mintau = min(tau), maxtau=max(tau))
+results_cells <- merge(Grid, pot, by="id", all=F)
+res_sf <- as(results_cells, "sf") 
+sp.list<-unique(res_sf$taxa_code)
+
+range_grid<-pot %>% group_by(taxa_code) %>% summarise(meanalph=mean(alph), minalph=min(alph), maxalph=max(alph), meantau = mean(tau), mintau_prob0 = min(tau), maxtau_prob0=max(tau))
 write.csv(range_grid, "output/QC/Range_Grid.csv")
 
 tau_R<-pot
@@ -858,7 +856,7 @@ for(m in 1:length(sp.list)) {
   #m<-1 #for testing each species
   
     plot.data <-NULL 
-    plot.data <- res_sf %>% filter(CommonName %in% sp.list[m])
+    plot.data <- res_sf %>% filter(taxa_code %in% sp.list[m])
     
     tau_sp<-NULL
     tau_sp<-tau_R %>% filter(taxa_code %in% sp.list[m])
@@ -868,7 +866,7 @@ tau_p1 <- ggplot() +
   geom_sf(data = qq, fill = NA) +
  # annotation_map_tile(type = "osm", zoomin = 0) +
   geom_sf(data=Grid, aes(), size=0.3) +
-  geom_sf(data=plot.data, aes(fill=tau), col="gray40", size=0.3) +
+  geom_sf(data=plot.data, aes(fill=tau_prob0), col="gray40", size=0.3) +
   scale_fill_gradient2("Tau\n(% per year)", low = ("red4"),
   mid = "white",
   high = ("royalblue4"), midpoint = 0, space = "Lab",
